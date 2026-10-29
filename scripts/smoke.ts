@@ -23,7 +23,8 @@ async function call(url: string, init: RequestInit) {
 const cfg = await call(`${fn}/api`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify({ action: 'config' }) });
 check('função api responde', cfg.status === 200, cfg.status);
 check('chave pública de aviso existe', typeof cfg.body?.vapidPublicKey === 'string' && cfg.body.vapidPublicKey.length > 80);
-check('IA configurada', cfg.body?.ai === true);
+const AI = process.env.ANTHROPIC_SET !== 'false';
+if (AI) check('IA configurada', cfg.body?.ai === true); else console.log('AVISO IA ainda sem chave (segredo ANTHROPIC_API_KEY): pulei os testes da IA');
 
 // 2. Conta anônima
 const su = await call(`${URL_}/auth/v1/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify({ data: {} }) });
@@ -41,8 +42,10 @@ if (token) {
   check('lê só a própria agenda', Array.isArray(rd.body) && rd.body.length === 1 && rd.body[0].data?.tasks?.[0]?.id === 'x1', Array.isArray(rd.body) ? rd.body.length : rd.body);
 
   // 4. IA
+  if (AI) {
   const ai = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', prompt: 'Responda só com o JSON {"ok": true}.' }) });
   check('IA responde', ai.status === 200 && /ok/.test(ai.body?.text || ''), ai.status === 200 ? (ai.body?.text || '').slice(0, 60) : ai.body);
+  }
 
   // 5. Aviso de teste sem celular inscrito
   const t = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'test' }) });

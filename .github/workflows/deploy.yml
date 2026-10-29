@@ -1,0 +1,66 @@
+name: Publicar o Faiz
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  SUPABASE_PROJECT_REF: rrsonqbecicgfadqtjki
+  SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Testes (avisos e criptografia)
+        run: npx -y tsx --test tests/backend.test.ts tests/functions.test.ts
+
+      - name: Preparar o Supabase (banco, segredos, relógio)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OWNER_WHATSAPP: ${{ secrets.OWNER_WHATSAPP }}
+        run: npx -y tsx scripts/deploy.ts
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Publicar as funções do servidor
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          REF="$SUPABASE_PROJECT_REF"
+          supabase functions deploy api --project-ref "$REF" --no-verify-jwt --use-api
+          supabase functions deploy tick --project-ref "$REF" --no-verify-jwt --use-api
+
+      - name: Teste do servidor no ar
+        env:
+          ANTHROPIC_SET: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: npx -y tsx scripts/smoke.ts
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: pages
+        uses: actions/deploy-pages@v4
