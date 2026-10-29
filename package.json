@@ -1,0 +1,6 @@
+{
+  "name": "faiz-web",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "tsx --test tests/backend.test.ts tests/functions.test.ts" }
+}
