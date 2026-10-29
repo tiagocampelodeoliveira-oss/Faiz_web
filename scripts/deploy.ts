@@ -34,8 +34,12 @@ if (!anon || !service) throw new Error('Não achei as chaves do projeto: ' + key
 step('chaves: ' + keys.map((k) => k.name).join(', '));
 
 // 2. Login sem cadastro (conta anônima por celular).
-await api('/config/auth', { method: 'PATCH', body: JSON.stringify({ external_anonymous_users_enabled: true }) });
-step('login anônimo ligado');
+try {
+  await api('/config/auth', { method: 'PATCH', body: JSON.stringify({ external_anonymous_users_enabled: true }) });
+  step('login anônimo ligado');
+} catch (e) {
+  console.log('::warning::Não pude ligar o login anônimo pela chave (falta permissão de administrador). Ligue no painel: Authentication > Sign In / Providers > Allow anonymous sign-ins.');
+}
 
 // 3. Banco.
 await sql(readFileSync('supabase/schema.sql', 'utf8'));
