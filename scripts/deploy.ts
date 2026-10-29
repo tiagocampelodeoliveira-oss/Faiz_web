@@ -15,6 +15,8 @@ function need(k: string): string {
   if (!v) { console.error(`::error::Falta o segredo ${k} no GitHub (Settings > Secrets and variables > Actions).`); process.exit(1); }
   return v;
 }
+for (const ev of ['unhandledRejection', 'uncaughtException']) process.on(ev as 'uncaughtException', (e) => { console.log(`::error::Preparar Supabase: ${String((e as Error)?.message || e).replace(/\n/g, ' ').slice(0, 900)}`); process.exit(1); });
+function step(msg: string) { console.log(`::notice::${msg}`); }
 async function api(path: string, init: RequestInit = {}): Promise<any> {
   const res = await fetch(API + path, { ...init, headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) } });
   const text = await res.text();
@@ -29,15 +31,15 @@ const pick = (...names: string[]) => keys.find((k) => names.includes(k.name) || 
 const anon = pick('anon', 'publishable');
 const service = pick('service_role', 'secret');
 if (!anon || !service) throw new Error('Não achei as chaves do projeto: ' + keys.map((k) => k.name + '/' + k.type).join(', '));
-console.log('chaves:', keys.map((k) => k.name).join(', '));
+step('chaves: ' + keys.map((k) => k.name).join(', '));
 
 // 2. Login sem cadastro (conta anônima por celular).
 await api('/config/auth', { method: 'PATCH', body: JSON.stringify({ external_anonymous_users_enabled: true }) });
-console.log('login anônimo ligado');
+step('login anônimo ligado');
 
 // 3. Banco.
 await sql(readFileSync('supabase/schema.sql', 'utf8'));
-console.log('banco aplicado');
+step('banco aplicado');
 
 // 4. Segredos das funções. As chaves VAPID nascem uma vez e nunca mudam (senão os celulares param de receber).
 const existing = new Set(((await api('/secrets')) as { name: string }[]).map((s) => s.name));
@@ -54,16 +56,16 @@ if (process.env.OWNER_WHATSAPP) secrets.push({ name: 'FAIZ_WHATSAPP', value: pro
 if (!existing.has('FAIZ_VAPID_PRIVATE') || !existing.has('FAIZ_VAPID_PUBLIC')) {
   const v = await generateVapidKeys();
   secrets.push({ name: 'FAIZ_VAPID_PUBLIC', value: v.publicKey }, { name: 'FAIZ_VAPID_PRIVATE', value: v.privateKey });
-  console.log('chaves de aviso criadas');
+  step('chaves de aviso criadas');
 }
 await api('/secrets', { method: 'POST', body: JSON.stringify(secrets) });
-console.log('segredos gravados:', secrets.map((s) => s.name).join(', '));
+step('segredos gravados: ' + secrets.map((s) => s.name).join(', '));
 
 // 5. Relógio: chama a função tick a cada minuto.
 const fnUrl = `https://${REF}.supabase.co/functions/v1/tick`;
 const headers = JSON.stringify({ 'Content-Type': 'application/json', 'x-tick-secret': tick }).replace(/'/g, "''");
 await sql(`select cron.schedule('faiz-tick', '* * * * *', $cron$ select net.http_post(url := '${fnUrl}', headers := '${headers}'::jsonb, body := '{}'::jsonb, timeout_milliseconds := 25000) $cron$);`);
-console.log('relógio de 1 minuto agendado');
+step('relógio de 1 minuto agendado');
 
 // 6. Configuração do site (só dados públicos).
 const supaUrl = `https://${REF}.supabase.co`;

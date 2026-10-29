@@ -8,7 +8,7 @@ const fn = `${URL_}/functions/v1`;
 const keyH = (k: string): Record<string, string> => (k.startsWith('sb_') ? { apikey: k } : { apikey: k, Authorization: `Bearer ${k}` });
 let failures = 0;
 const check = (name: string, ok: boolean, info: unknown = '') => {
-  console.log(`${ok ? 'OK   ' : 'FALHA'} ${name}${info ? ' — ' + (typeof info === 'string' ? info : JSON.stringify(info)) : ''}`);
+  console.log(`${ok ? '::notice::OK ' : '::error::FALHA '} ${name}${info ? ' — ' + (typeof info === 'string' ? info : JSON.stringify(info)) : ''}`);
   if (!ok) failures++;
 };
 async function call(url: string, init: RequestInit) {
