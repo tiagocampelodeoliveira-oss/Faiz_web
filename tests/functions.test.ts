@@ -38,12 +38,15 @@ const db = {
   states: [{ user_id: U, data: { name: 'Tiago', settings: { tz: 'America/Sao_Paulo' }, tasks: [{ id: 'b', title: 'Corrida', date: '2026-10-29', start: 1110, end: 1170 }] } }],
   sent: [] as any[],
   usage: [] as any[],
+  owners: [] as any[],
+  status: [] as any[],
 };
 const pushed: any[] = [];
 let pushStatus = 201;
 let anthropicBody: any = null;
 const models: string[] = [];
 let sonnetDown = false;
+let noCredit = false;
 let overpassQuery = '';
 let photonUrl = '';
 let photonFeatures: any[] = [];
@@ -53,6 +56,7 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
   if (url.host === 'web.push.apple.com') { pushed.push(await open(init.body as Uint8Array)); return new Response('', { status: pushStatus }); }
   if (url.host === 'api.anthropic.com') {
     anthropicBody = JSON.parse(String(init.body)); models.push(anthropicBody.model);
+    if (noCredit) return new Response('{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}', { status: 400 });
     if (sonnetDown && anthropicBody.model === 'claude-sonnet-5-5') return new Response('{"error":"overloaded"}', { status: 529 });
     return Response.json({ content: [{ type: 'text', text: '{"acao":"conversa","resposta":"Oi"}' }] });
   }
@@ -69,6 +73,7 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
   const table = url.pathname.replace('/rest/v1/', '') as keyof typeof db;
   assert.equal((init.headers as any).apikey, 'service-jwt', 'servidor usa a chave de serviço');
   if (method === 'GET') return Response.json(db[table]);
+  if (method === 'PATCH') { const v = JSON.parse(String(init.body)); (db as any)[table] = (db as any)[table].map((r: any) => ({ ...r, ...v })); return new Response(null, { status: 204 }); }
   if (method === 'DELETE') { if (table === 'subs') db.subs = []; return new Response(null, { status: 204 }); }
   const rows = [].concat(JSON.parse(String(init.body)));
   if (table === 'sent') {
@@ -193,4 +198,32 @@ test('api: parte fixa vai em system com cache; sem system, continua funcionando'
   await post(api, { action: 'ai', prompt: 'só o texto' }, auth);
   assert.equal(anthropicBody.system, undefined);
   assert.equal(anthropicBody.messages[0].content, 'só o texto');
+});
+
+test('api: só o dono (o WhatsApp cadastrado) vira dono do teste', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  assert.equal((await post(api, { action: 'owner', whatsapp: '11 99999-0000' }, auth)).status, 403);
+  assert.equal(db.owners.length, 0);
+  assert.equal((await post(api, { action: 'owner', whatsapp: '+55 (61) 99999-8888' }, auth)).status, 200);
+  assert.deepEqual(db.owners.map((o) => o.user_id), [U]);
+  assert.equal((await (await post(api, { action: 'me' }, auth)).json()).owner, true);
+});
+
+test('api: crédito acabou → avisa a Íris (no_credit), marca a situação e manda alerta ao dono uma vez', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  db.usage = []; db.subs = [{ endpoint: 'https://web.push.apple.com/dono', user_id: U, p256dh: b64u(uaPub), auth: b64u(authS) }];
+  pushed.length = 0; noCredit = true;
+  const r = await post(api, { action: 'ai', system: 'fixo', prompt: 'oi' }, auth);
+  assert.equal(r.status, 402);
+  assert.equal((await r.json()).error, 'no_credit');
+  assert.equal(pushed.length, 1);
+  assert.equal(pushed[0].title, 'Crédito da IA acabou ⚠️');
+  assert.equal((await (await post(api, { action: 'config' })).json()).aiCredit, false);
+  await post(api, { action: 'ai', system: 'fixo', prompt: 'oi de novo' }, auth);
+  assert.equal(pushed.length, 1, 'não repete o alerta na mesma janela de 6 horas');
+  // voltou o crédito
+  noCredit = false;
+  const ok = await post(api, { action: 'ai', system: 'fixo', prompt: 'oi' }, auth);
+  assert.equal(ok.status, 200);
+  assert.equal((await (await post(api, { action: 'config' })).json()).aiCredit, true);
 });

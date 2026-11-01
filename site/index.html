@@ -386,7 +386,7 @@ const today = () => L.dateKey(new Date());
 function markDay() { const d = today(); if (!S.stats.days.includes(d)) { S.stats.days.push(d); save(); } }
 markDay();
 
-const U = { tab: 'hoje', filter: 'todas', tfilter: 'pendentes', agenda: today(), typing: false, aiState: 'loading', aiOn: true, scrollChat: false, pushState: 'checking', testing: false, listening: false };
+const U = { tab: 'hoje', filter: 'todas', tfilter: 'pendentes', agenda: today(), typing: false, aiState: 'loading', aiOn: true, scrollChat: false, pushState: 'checking', testing: false, listening: false, aiCredit: true, owner: false };
 let waNumber = '', vapidKey = '';
 
 /* ---------- Nuvem: conta anônima, agenda e servidor ---------- */
@@ -497,10 +497,10 @@ async function updatePushState() { U.pushState = await Push.state(); render(true
 /* Configuração pública: chave dos avisos, WhatsApp das opiniões, IA ligada. */
 (async () => {
   if (!Cloud.on) { U.aiState = 'off'; render(true); return; }
-  try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; }
+  try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; U.aiCredit = c.aiCredit !== false; }
   catch (e) { U.aiState = 'off'; }
   if (await Cloud.pull()) render(); else render(true);
-  if (S.onboarded) { Cloud.push(); Push.refresh(); }
+  if (S.onboarded) { Cloud.push(); Push.refresh(); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; if (U.tab === 'mais') render(true); }).catch(() => {}); }
   updatePushState();
 })();
 
@@ -585,7 +585,8 @@ async function send(text, opt = {}) {
     } catch (e) {
       S.stats.aiFail++; failed = true;
       reply = L.interpret(clean, { now: new Date(), tasks: S.tasks });
-      const why = e?.code === 'limit' ? 'Você chegou ao limite de pedidos à IA de hoje; respondi no modo simples.' : e?.code === 'busy' ? 'A IA está ocupada agora; respondi no modo simples.' : !navigator.onLine ? 'Sem internet agora; respondi no modo simples.' : '';
+      if (e?.code === 'no_credit') U.aiCredit = false;
+      const why = e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
       if (why) reply.notes = [reply.notes, why].filter(Boolean).join('\n');
     }
   } else {
@@ -1046,18 +1047,21 @@ const screens = {
       <div class="label">Teste do Faiz</div>
       <div class="card">
         <button class="setrow" type="button" data-act="feedback"><div class="txt"><div class="t">Dar minha opinião</div><div class="meta">Leva 1 minuto e ajuda muito.</div></div><span class="pill navy">Abrir</span></button>
+        ${U.owner
+          ? `<div class="setrow"><div class="txt"><div class="t">Alertas do teste</div><div class="meta">Ligados neste celular. Você recebe um aviso se o crédito da IA acabar.</div></div></div>${!U.aiCredit ? '<div style="padding:0 16px 14px"><div class="warn"><b>Crédito da IA acabou.</b> A Íris está no modo simples. Recarregue em console.anthropic.com › Billing.</div></div>' : ''}`
+          : `<button class="setrow" type="button" data-act="owner"><div class="txt"><div class="t">Receber alertas do teste</div><div class="meta">Só para quem organiza o teste.</div></div><span class="pill">Ativar</span></button>`}
         <div class="setrow"><div class="txt"><div class="t">Seu uso até agora</div><div class="meta num">${plural(st.days.length, 'dia', 'dias')} · ${plural(st.requests, 'pedido', 'pedidos')} ao Faiz · ${plural(st.confirmed, 'plano confirmado', 'planos confirmados')}</div></div></div>
       </div>
       <div class="label">Preferências</div>
       <div class="card">
         <div class="setrow"><div class="txt"><label class="t" for="nameEdit">Seu nome</label><input id="nameEdit" class="field" style="margin-top:6px;padding:9px 12px" maxlength="40" value="${esc(S.name)}"></div></div>
-        <div class="setrow"><div class="txt"><div class="t">Ler as respostas em voz alta</div><div class="meta">${S.settings.speak ? 'Ligado: o Faiz fala todas as respostas.' : 'Desligado: o Faiz só fala quando você usa o microfone.'}</div></div><button class="toggle" type="button" role="switch" aria-checked="${!!S.settings.speak}" aria-label="Ler as respostas em voz alta" data-act="speak"></button></div>
+        <div class="setrow"><div class="txt"><div class="t">Ler as respostas em voz alta</div><div class="meta">${S.settings.speak ? 'Ligado: a Íris fala todas as respostas.' : 'Desligado: a Íris só fala quando você usa o microfone.'}</div></div><button class="toggle" type="button" role="switch" aria-checked="${!!S.settings.speak}" aria-label="Ler as respostas em voz alta" data-act="speak"></button></div>
         <div class="setrow"><div class="txt"><div class="t">Perguntar antes de mexer na agenda</div><div class="meta">${S.settings.askBefore ? 'Você confirma cada plano antes de entrar na agenda.' : 'O Faiz agenda direto e oferece Desfazer.'}</div></div><button class="toggle" type="button" role="switch" aria-checked="${S.settings.askBefore}" aria-label="Perguntar antes de mexer na agenda" data-act="askbefore"></button></div>
-        <div class="setrow"><div class="txt"><div class="t">Inteligência da Íris</div><div class="meta">${U.aiState === 'ready' && U.aiOn ? 'Ligada.' : U.aiState === 'loading' ? 'Verificando...' : 'Indisponível agora. A Íris entende frases mais diretas.'}</div></div></div>
+        <div class="setrow"><div class="txt"><div class="t">Inteligência da Íris</div><div class="meta">${!U.aiCredit ? 'Sem crédito agora. A Íris responde no modo simples, com frases mais diretas.' : U.aiState === 'ready' && U.aiOn ? 'Ligada.' : U.aiState === 'loading' ? 'Verificando...' : 'Indisponível agora. A Íris entende frases mais diretas.'}</div></div></div>
       </div>
       <div class="label">Seus dados</div>
       <div class="card">
-        <button class="setrow" type="button" data-act="clearchat"><div class="txt"><div class="t">Apagar conversa com o Faiz</div></div></button>
+        <button class="setrow" type="button" data-act="clearchat"><div class="txt"><div class="t">Apagar conversa com a Íris</div></div></button>
         <button class="setrow" type="button" data-act="reset"><div class="txt"><div class="t" style="color:var(--red-ink);font-weight:600">Apagar todos os meus dados</div><div class="meta">Tarefas, conversa e avisos deste celular.</div></div></button>
       </div>
       <p class="meta" style="text-align:center;margin-top:22px">Faiz · versão de teste${U.cloudErr ? ' · sem conexão com a nuvem agora' : ''}</p>
@@ -1153,6 +1157,27 @@ function feedbackSheet() {
     draw();
   });
 }
+function ownerSheet() {
+  sheet(`<h3>Alertas do teste</h3>
+    <p class="muted" style="margin:0">Para receber neste celular os alertas do teste (como o crédito da IA acabando), digite o seu WhatsApp, o mesmo que recebe as opiniões.</p>
+    <label class="flabel" for="owWa">Seu WhatsApp com DDD<input class="field" id="owWa" inputmode="tel" maxlength="24" placeholder="(61) 99999-8888"></label>
+    <p class="err" id="owErr" hidden></p>
+    <div class="row"><button class="btn light" type="button" id="owNo" style="flex:1">Cancelar</button><button class="btn" type="button" id="owYes" style="flex:2">Ativar alertas</button></div>`, (el) => {
+    el.querySelector('#owNo').onclick = closeSheet;
+    el.querySelector('#owYes').onclick = async () => {
+      const err = el.querySelector('#owErr');
+      try {
+        await Cloud.fn('owner', { whatsapp: el.querySelector('#owWa').value });
+        U.owner = true; closeSheet(); render(true);
+        toast(U.pushState === 'on' ? 'Pronto! Os alertas do teste vão chegar neste celular.' : 'Pronto! Ative os avisos em Mais para os alertas chegarem.');
+      } catch (e) {
+        err.hidden = false;
+        err.textContent = e?.code === 'not_owner' ? 'Esse não é o número de quem organiza o teste.' : 'Não consegui agora. Confira a internet e tente de novo.';
+      }
+    };
+    setTimeout(() => el.querySelector('#owWa').focus(), 60);
+  });
+}
 function confirmSheet(title, body, okLabel, onOk) {
   sheet(`<h3>${esc(title)}</h3><p class="muted" style="margin:0">${esc(body)}</p><div class="row"><button class="btn light" type="button" id="cfNo" style="flex:1">Cancelar</button><button class="btn" type="button" id="cfYes" style="flex:1;background:var(--red-strong)">${esc(okLabel)}</button></div>`, (el) => {
     el.querySelector('#cfNo').onclick = closeSheet;
@@ -1190,6 +1215,7 @@ document.addEventListener('click', (e) => {
     case 'undo': undoMsg(id); break;
     case 'newtask': newTaskSheet(); break;
     case 'feedback': feedbackSheet(); break;
+    case 'owner': ownerSheet(); break;
     case 'askbefore': S.settings.askBefore = !S.settings.askBefore; save(); render(true); break;
     case 'mic': Voice.start(); break;
     case 'speak': S.settings.speak = !S.settings.speak; save(); render(true); if (S.settings.speak) Voice.speak('Pronto, vou ler as respostas em voz alta.'); break;

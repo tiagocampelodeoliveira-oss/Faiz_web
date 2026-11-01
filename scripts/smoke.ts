@@ -23,8 +23,9 @@ async function call(url: string, init: RequestInit) {
 const cfg = await call(`${fn}/api`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify({ action: 'config' }) });
 check('função api responde', cfg.status === 200, cfg.status);
 check('chave pública de aviso existe', typeof cfg.body?.vapidPublicKey === 'string' && cfg.body.vapidPublicKey.length > 80);
-const AI = process.env.ANTHROPIC_SET !== 'false';
-if (AI) check('IA configurada', cfg.body?.ai === true); else console.log('AVISO IA ainda sem chave (segredo ANTHROPIC_API_KEY): pulei os testes da IA');
+let AI = process.env.ANTHROPIC_SET !== 'false';
+if (AI) check('IA configurada', cfg.body?.ai === true);
+if (cfg.body?.aiCredit === false) console.log('::warning::CRÉDITO DA IA ACABOU: a Íris está no modo simples. Recarregue em console.anthropic.com › Billing.'); else console.log('AVISO IA ainda sem chave (segredo ANTHROPIC_API_KEY): pulei os testes da IA');
 
 // 2. Conta anônima
 const su = await call(`${URL_}/auth/v1/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify({ data: {} }) });
@@ -44,8 +45,11 @@ if (token) {
   // 4. IA
   if (AI) {
   const ai = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', prompt: 'Responda só com o JSON {"ok": true}.' }) });
+  if (ai.body?.error === 'no_credit') { console.log('::warning::CRÉDITO DA IA ACABOU: pulei os testes da IA. Recarregue em console.anthropic.com › Billing.'); AI = false; }
+  else {
   check('IA responde', ai.status === 200 && /ok/.test(ai.body?.text || ''), ai.status === 200 ? (ai.body?.text || '').slice(0, 60) : ai.body);
   check('IA usa o modelo Sonnet', /sonnet/.test(ai.body?.model || ''), ai.body?.model || ai.body);
+  }
   }
 
   // 4b. Lugares perto (OpenStreetMap). Serviço de terceiros: falha vira aviso, não trava a publicação.

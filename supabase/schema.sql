@@ -44,3 +44,18 @@ alter table public.usage enable row level security;
 -- Para o relógio de cada minuto.
 create extension if not exists pg_cron;
 create extension if not exists pg_net with schema extensions;
+
+-- Dono do teste (recebe alertas, como "crédito da IA acabou"). Só o servidor.
+create table if not exists public.owners (
+  user_id uuid primary key references auth.users on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.owners enable row level security;
+
+-- Situação do serviço (ex.: crédito da IA). Só o servidor.
+create table if not exists public.status (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.status enable row level security;

@@ -33,12 +33,53 @@ async function ai(userId: string, prompt: unknown, system: unknown): Promise<Res
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     console.error('anthropic', res.status, t.slice(0, 300));
+    if (/credit balance|billing|insufficient/i.test(t)) { await creditEmpty(); return json({ error: 'no_credit' }, 402); }
     return json({ error: res.status === 429 ? 'busy' : 'ai_error', status: res.status }, 502);
   }
+  await creditOk();
   const out = await res.json();
   const text = (out.content || []).filter((c: { type: string }) => c.type === 'text').map((c: { text: string }) => c.text).join('');
   const u = out.usage || {};
   return json({ text, model: out.model || '', cache: { read: u.cache_read_input_tokens || 0, write: u.cache_creation_input_tokens || 0, input: u.input_tokens || 0 } });
+}
+
+/** Crédito da IA: marca a situação e avisa o dono do teste no celular (no máximo uma vez a cada 6 horas). */
+async function creditEmpty(): Promise<void> {
+  creditWasEmpty = true;
+  try {
+    await rest('status?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: 'ai_credit', value: { empty: true }, updated_at: new Date().toISOString() }) });
+    const owners: { user_id: string }[] = await rest('owners?select=user_id');
+    const slot = `owner:credit:${new Date().toISOString().slice(0, 10)}:${Math.floor(new Date().getUTCHours() / 6)}`;
+    const { keys, subject } = vapid();
+    for (const o of owners) {
+      const won = await rest('sent?on_conflict=user_id,key', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify([{ user_id: o.user_id, key: slot }]) });
+      if (!won?.length) continue;
+      const subs = await rest(`subs?user_id=eq.${o.user_id}&select=endpoint,p256dh,auth`);
+      for (const sb of subs) await sendPush({ endpoint: sb.endpoint, keys: { p256dh: sb.p256dh, auth: sb.auth } }, { title: 'Crédito da IA acabou ⚠️', body: 'A Íris está no modo simples. Recarregue em console.anthropic.com › Billing.', url: './', tag: 'credito' }, keys, subject, 6 * 3600);
+    }
+  } catch (e) { console.error('creditEmpty', e); }
+}
+let creditWasEmpty: boolean | null = null;
+async function creditOk(): Promise<void> {
+  try {
+    if (creditWasEmpty === false) return;
+    const row = (await rest('status?key=eq.ai_credit&select=value'))?.[0];
+    if (row?.value?.empty) await rest('status?key=eq.ai_credit', { method: 'PATCH', body: JSON.stringify({ value: { empty: false }, updated_at: new Date().toISOString() }) });
+    creditWasEmpty = false;
+  } catch (e) { console.error('creditOk', e); }
+}
+async function aiCreditEmpty(): Promise<boolean> {
+  try { return !!(await rest('status?key=eq.ai_credit&select=value'))?.[0]?.value?.empty; } catch { return false; }
+}
+
+/** O Tiago se registra como dono do teste digitando o WhatsApp dele (o mesmo do segredo OWNER_WHATSAPP). */
+async function becomeOwner(userId: string, whatsapp: unknown): Promise<Response> {
+  const mine = (Deno.env.get('FAIZ_WHATSAPP') || '').replace(/\D/g, '');
+  const typed = String(whatsapp || '').replace(/\D/g, '');
+  const same = mine.length >= 10 && (typed === mine || (typed.length >= 10 && mine.endsWith(typed)));
+  if (!same) return json({ error: 'not_owner' }, 403);
+  await rest('owners?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' }, body: JSON.stringify({ user_id: userId }) });
+  return json({ ok: true });
 }
 
 async function subscribe(userId: string, sub: Subscription, ua: string): Promise<Response> {
@@ -146,7 +187,7 @@ Deno.serve(async (req) => {
   const action = String(body.action || '');
   try {
     if (action === 'config') {
-      return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY') });
+      return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY'), aiCredit: !(await aiCreditEmpty()) });
     }
     const user = await getUser(req);
     if (!user) return json({ error: 'auth' }, 401);
@@ -154,6 +195,8 @@ Deno.serve(async (req) => {
     if (action === 'subscribe') return await subscribe(user.id, body.subscription, req.headers.get('user-agent') || '');
     if (action === 'test') return await testPush(user.id);
     if (action === 'nearby') return await nearby(body);
+    if (action === 'owner') return await becomeOwner(user.id, body.whatsapp);
+    if (action === 'me') return json({ owner: !!(await rest(`owners?user_id=eq.${user.id}&select=user_id`))?.length, aiCredit: !(await aiCreditEmpty()) });
     return json({ error: 'unknown_action' }, 400);
   } catch (e) {
     console.error(action, e);
