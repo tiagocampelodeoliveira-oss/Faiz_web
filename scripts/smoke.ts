@@ -53,6 +53,34 @@ if (token) {
   const nOk = nb.status === 200 && Array.isArray(nb.body?.places) && nb.body.places.length > 0;
   console.log(`${nOk ? '::notice::OK ' : '::warning::AVISO '} padarias perto da Av. Paulista — ${nOk ? nb.body.places.map((p: any) => `${p.nome} ${p.dist} m`).slice(0, 3).join('; ') + ' | ' + (nb.body.diag || []).join(', ') : JSON.stringify(nb.body).slice(0, 400)}`);
 
+  // 4c. Frases reais com a IA de verdade, usando a lógica publicada no site (site/index.html).
+  if (AI) {
+    const { readFileSync } = await import('node:fs');
+    const vm = await import('node:vm');
+    const html = readFileSync('site/index.html', 'utf8');
+    const logicSrc = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((x) => x.includes('FazLogic'))!;
+    const box: any = {}; vm.runInNewContext(logicSrc + ';this.L = FazLogic;', box);
+    const L = box.L;
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const amanha = L.addDays(L.dateKey(now), 1);
+    const tasks = [{ id: 'acad1', title: 'Academia', date: amanha, start: 420, end: 480, category: 'pessoal', color: 'green', status: 'pendente', createdAt: 0 }];
+    const frases: [string, (r: any) => boolean][] = [
+      ['padaria mais proxima de mim', (r) => r.nearby?.osm?.includes('shop=bakery')],
+      ['posto de gasolina mais proximo de mim', (r) => r.nearby?.osm?.includes('amenity=fuel')],
+      ['quero correr amanhã depois do trabalho e jantar com a Ana às 21h', (r) => (r.ops || []).length >= 2 && (r.plan || []).some((p: any) => p.start === 1260)],
+      ['marca uma reunião', (r) => !r.ops && /\?/.test(r.text)],
+      ['cancela a academia de amanhã e coloca corrida às 7', (r) => (r.ops || []).some((o: any) => o.type === 'remove' && o.id === 'acad1') && (r.ops || []).some((o: any) => o.type === 'add' && o.task.start === 420)],
+    ];
+    for (const [frase, ok] of frases) {
+      const res = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', prompt: L.buildPrompt(frase, { now, tasks }) }) });
+      let r: any = null;
+      try { const t = String(res.body?.text || ''); r = L.aiToReply(JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)), frase, { now, tasks }); } catch { /* resposta fora do formato */ }
+      const good = !!r && ok(r);
+      const resumo = r ? `${r.text.slice(0, 90)}${r.ops ? ' | ops: ' + r.ops.map((o: any) => o.type + (o.task ? ' ' + o.task.title + ' ' + L.fmtTime(o.task.start ?? 0) : '')).join(', ') : ''}${r.nearby ? ' | busca: ' + r.nearby.osm.join(',') : ''}` : String(res.body?.text || JSON.stringify(res.body)).slice(0, 160);
+      console.log(`${good ? '::notice::IA OK ' : '::warning::IA ERROU '} "${frase}" — ${resumo}`);
+    }
+  }
+
   // 5. Aviso de teste sem celular inscrito
   const t = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'test' }) });
   check('aviso de teste responde', t.status === 200 && t.body?.reason === 'no_subscription', t.body);
