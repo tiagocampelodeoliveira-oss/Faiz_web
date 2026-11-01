@@ -203,3 +203,16 @@ test('revisão da noite: cobra o que ficou; comemora quando fez tudo', () => {
   const nada: AppState = { ...base, tasks: base.tasks!.map((t) => ({ ...t, status: 'pendente' })) };
   assert.match(dueNotices(nada, at('2026-10-29', '21:25'), new Set())[0].body, /^Zero de 5 hoje\?/);
 });
+
+test('pesquisa do teste: dia 3 e dia 7 às 19h, só se não respondeu', () => {
+  const q = (startDate: string, hora: string, survey: any = undefined) =>
+    dueNotices({ name: 'Ana', startDate, survey, settings: { tz: SP }, tasks: [] }, at('2026-11-05', hora), new Set()).filter((n) => n.tag === 'pesquisa');
+  assert.deepEqual(q('2026-11-03', '19:00').map((n) => n.key), ['q:d3']);
+  assert.equal(q('2026-11-03', '19:00')[0].url, './?v=pesquisa');
+  assert.deepEqual(q('2026-11-04', '19:00'), [], 'só no 3º dia');
+  assert.deepEqual(q('2026-11-03', '18:59'), [], 'só depois das 19h');
+  assert.deepEqual(q('2026-11-03', '19:30', { d3: { nota: 4 } }), [], 'já respondeu');
+  assert.deepEqual(q('2026-10-30', '20:00', { d3: {} }).map((n) => n.key), ['q:d7']);
+  assert.deepEqual(q('2026-10-30', '20:00', { d3: {}, d7: {} }), []);
+  assert.deepEqual(dueNotices({ settings: { tz: SP }, tasks: [] }, at('2026-11-05', '19:00'), new Set()), [], 'sem data de início, nada');
+});

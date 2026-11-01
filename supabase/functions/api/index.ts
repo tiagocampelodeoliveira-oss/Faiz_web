@@ -48,16 +48,34 @@ async function creditEmpty(): Promise<void> {
   creditWasEmpty = true;
   try {
     await rest('status?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: 'ai_credit', value: { empty: true }, updated_at: new Date().toISOString() }) });
-    const owners: { user_id: string }[] = await rest('owners?select=user_id');
-    const slot = `owner:credit:${new Date().toISOString().slice(0, 10)}:${Math.floor(new Date().getUTCHours() / 6)}`;
-    const { keys, subject } = vapid();
-    for (const o of owners) {
-      const won = await rest('sent?on_conflict=user_id,key', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify([{ user_id: o.user_id, key: slot }]) });
-      if (!won?.length) continue;
-      const subs = await rest(`subs?user_id=eq.${o.user_id}&select=endpoint,p256dh,auth`);
-      for (const sb of subs) await sendPush({ endpoint: sb.endpoint, keys: { p256dh: sb.p256dh, auth: sb.auth } }, { title: 'Crédito da IA acabou ⚠️', body: 'A Íris está no modo simples. Recarregue em console.anthropic.com › Billing.', url: './', tag: 'credito' }, keys, subject, 6 * 3600);
-    }
+    await notifyOwners(`owner:credit:${new Date().toISOString().slice(0, 10)}:${Math.floor(new Date().getUTCHours() / 6)}`, { title: 'Crédito da IA acabou ⚠️', body: 'A Íris está no modo simples. Recarregue em console.anthropic.com › Billing.', url: './', tag: 'credito' });
   } catch (e) { console.error('creditEmpty', e); }
+}
+
+/** Manda um aviso ao(s) dono(s) do teste; `slot` impede repetir o mesmo aviso. */
+async function notifyOwners(slot: string, msg: { title: string; body: string; url: string; tag: string }): Promise<void> {
+  const owners: { user_id: string }[] = await rest('owners?select=user_id');
+  const { keys, subject } = vapid();
+  for (const o of owners) {
+    const won = await rest('sent?on_conflict=user_id,key', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify([{ user_id: o.user_id, key: slot }]) });
+    if (!won?.length) continue;
+    const subs = await rest(`subs?user_id=eq.${o.user_id}&select=endpoint,p256dh,auth`);
+    for (const sb of subs) await sendPush({ endpoint: sb.endpoint, keys: { p256dh: sb.p256dh, auth: sb.auth } }, msg, keys, subject, 6 * 3600);
+  }
+}
+
+/** "Algo deu errado": guarda o relato com os dados técnicos e avisa o dono do teste. */
+async function report(userId: string, text: unknown, ctx: unknown, name: unknown): Promise<Response> {
+  const t = String(text || '').trim().slice(0, 2000);
+  if (!t) return json({ error: 'bad_request' }, 400);
+  const since = new Date(Date.now() - 864e5).toISOString();
+  const recent = await rest(`reports?user_id=eq.${userId}&created_at=gte.${since}&select=id`);
+  if (recent.length >= 10) return json({ error: 'limit' }, 429);
+  const c = ctx && typeof ctx === 'object' && !Array.isArray(ctx) && JSON.stringify(ctx).length <= 4000 ? ctx : {};
+  const rows = await rest('reports', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ user_id: userId, text: t, ctx: c }) });
+  const quem = String(name || '').trim().split(/\s+/)[0].slice(0, 30) || 'Um testador';
+  try { await notifyOwners(`owner:report:${rows?.[0]?.id ?? Date.now()}`, { title: `Problema relatado por ${quem} 🛠️`, body: t.slice(0, 140), url: './', tag: 'relato' }); } catch (e) { console.error('report notify', e); }
+  return json({ ok: true });
 }
 let creditWasEmpty: boolean | null = null;
 async function creditOk(): Promise<void> {
@@ -196,6 +214,7 @@ Deno.serve(async (req) => {
     if (action === 'test') return await testPush(user.id);
     if (action === 'nearby') return await nearby(body);
     if (action === 'owner') return await becomeOwner(user.id, body.whatsapp);
+    if (action === 'report') return await report(user.id, body.text, body.ctx, body.name);
     if (action === 'me') return json({ owner: !!(await rest(`owners?user_id=eq.${user.id}&select=user_id`))?.length, aiCredit: !(await aiCreditEmpty()) });
     return json({ error: 'unknown_action' }, 400);
   } catch (e) {

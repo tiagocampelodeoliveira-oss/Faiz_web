@@ -175,6 +175,8 @@ button{cursor:pointer}
 .botrow .msg{max-width:none;flex:1;min-width:0}
 .irisline{border:0;width:100%;text-align:left;display:flex;align-items:center;gap:12px;padding:12px 14px;margin-top:16px;font-size:15px;line-height:1.4;color:var(--ink)}
 .irisline span{flex:1;min-width:0}
+.opt{border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:11px 14px;font-size:15px;text-align:left}
+.opt[aria-pressed=true]{border-color:var(--blue);background:var(--blue-soft);color:var(--blue-ink);font-weight:600}
 .ai-note{font-size:12.5px;color:var(--ink-muted);text-align:center;margin:6px 0 2px}
 
 /* mais / formulários */
@@ -321,6 +323,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
+const APP_VERSION = '2026-11-01 20:43';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -361,6 +364,7 @@ const STANDALONE = window.matchMedia?.('(display-mode: standalone)').matches || 
 const PUSH_OK = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 /** Pode receber avisos aqui? No iPhone, só com o Faiz aberto pela tela de início. */
 const canNotifyHere = () => PUSH_OK && (!IS_IOS || STANDALONE);
+const DEVICE = `${IS_IOS ? 'iPhone' : /Android/.test(UA) ? 'Android' : 'outro'} (${STANDALONE ? 'pelo ícone' : 'pelo navegador'})`;
 const permission = () => (('Notification' in window) ? Notification.permission : 'unsupported');
 
 /* ---------- Estado (neste aparelho + nuvem) ---------- */
@@ -385,7 +389,11 @@ function persistLocal() { try { localStorage.setItem(KEY, JSON.stringify({ ...S,
 const today = () => L.dateKey(new Date());
 function markDay() { const d = today(); if (!S.stats.days.includes(d)) { S.stats.days.push(d); save(); } }
 markDay();
+if (S.onboarded && !S.startDate) { S.startDate = today(); save(); }
+if (S.stats.device !== DEVICE) { S.stats.device = DEVICE; save(); }
 
+window.addEventListener('error', (e) => { U.lastError = String(e.message || e.error || '').slice(0, 200); });
+window.addEventListener('unhandledrejection', (e) => { U.lastError = String(e.reason?.message || e.reason || '').slice(0, 200); });
 const U = { tab: 'hoje', filter: 'todas', tfilter: 'pendentes', agenda: today(), typing: false, aiState: 'loading', aiOn: true, scrollChat: false, pushState: 'checking', testing: false, listening: false, aiCredit: true, owner: false };
 let waNumber = '', vapidKey = '';
 
@@ -419,7 +427,7 @@ const Cloud = (() => {
     if (needAuth) headers.Authorization = 'Bearer ' + (await token());
     const r = await fetch(`${url}/functions/v1/api`, { method: 'POST', headers, body: JSON.stringify({ action, ...body }) });
     let j = {}; try { j = await r.json(); } catch (e) {}
-    if (!r.ok) { const err = new Error(j.error || 'http ' + r.status); err.code = j.error; err.status = r.status; throw err; }
+    if (!r.ok) { const err = new Error(j.error || 'http ' + r.status); err.code = j.error; err.status = r.status; U.lastError = `${action}: ${r.status} ${j.error || ''}`; throw err; }
     return j;
   }
   /** Envia o estado para a nuvem (o servidor lê as tarefas para mandar os avisos). */
@@ -651,7 +659,7 @@ async function enableNotify(fromPermit) {
   try {
     const st = await Push.enable();
     U.pushState = st;
-    if (st === 'on') toast('Pronto! Agora eu te aviso no celular 😉');
+    if (st === 'on') { if (fromPermit) S.permAsked = true; render(true); return pushCheck(); }
     else if (st === 'denied') toast('Os avisos foram bloqueados. Veja em Mais como liberar.');
     else if (st === 'unsupported') toast('Este navegador não aceita avisos.');
   } catch (e) {
@@ -762,6 +770,7 @@ function openLink(href) {
   if (!S.onboarded) return;
   if (t) { U.tab = 'hoje'; render(); taskSheet(t); }
   else if (v === 'noite') { U.tab = 'hoje'; render(); nightSheet(); }
+  else if (v === 'pesquisa') { U.tab = 'hoje'; render(); const q = pesquisaDevida(); if (q) surveySheet(q); else toast('Você já respondeu. Valeu! 💜'); }
   try { history.replaceState(null, '', location.pathname); } catch (e) {}
 }
 navigator.serviceWorker?.addEventListener('message', (e) => { if (e.data?.type === 'open') openLink(e.data.url); });
@@ -867,6 +876,114 @@ async function clearNotifications() {
   } catch (e) {}
 }
 
+/* ---------- Pesquisa do teste (dia 3 e dia 7) ----------
+   Perguntas usadas por empresas de produto: esforço (CES), teste de Sean Ellis (PMF), NPS,
+   principal benefício e "como melhorar" (método da Superhuman) e disposição a pagar. */
+const PESQUISA = {
+  d3: { titulo: 'Como tá sendo comigo até agora?', mood: 'pensando', perguntas: [
+    { k: 'facil', t: 'De 1 a 5, quão fácil está sendo organizar sua rotina comigo?', tipo: 'escala', de: 1, ate: 5, rotulos: ['Muito difícil', 'Muito fácil'] },
+    { k: 'entendeu', t: 'Eu entendi o que você pediu?', tipo: 'opcao', ops: ['Quase sempre', 'Na maioria das vezes', 'Às vezes', 'Quase nunca'] },
+    { k: 'avisos', t: 'Meus avisos te ajudaram a fazer as coisas?', tipo: 'opcao', ops: ['Sim, muito', 'Um pouco', 'Não ajudaram', 'Não recebi avisos'] },
+    { k: 'irritou', t: 'O que mais te irritou ou fez falta até agora?', tipo: 'texto', opcional: true },
+  ] },
+  d7: { titulo: 'Fechamos a semana! Me dá sua nota final?', mood: 'comemorando', perguntas: [
+    { k: 'ellis', t: 'Como você se sentiria se não pudesse mais usar o Faiz?', tipo: 'opcao', ops: ['Muito decepcionado', 'Um pouco decepcionado', 'Não ficaria decepcionado'] },
+    { k: 'nps', t: 'De 0 a 10, quanto você recomendaria o Faiz para um amigo?', tipo: 'escala', de: 0, ate: 10, rotulos: ['Nada', 'Com certeza'] },
+    { k: 'beneficio', t: 'Qual foi o principal benefício que o Faiz te deu?', tipo: 'texto', opcional: true },
+    { k: 'melhorar', t: 'Como a gente pode melhorar o Faiz pra você?', tipo: 'texto', opcional: true },
+    { k: 'iris', t: 'E o meu jeito (direta, que cobra)?', tipo: 'opcao', ops: ['Adorei', 'Tá bom assim', 'Exagerado, me incomodou'] },
+    { k: 'preco', t: 'Quanto você pagaria por mês por um Faiz completo?', tipo: 'opcao', ops: ['Nada, só usaria grátis', 'Até R$ 10', 'R$ 10 a R$ 20', 'R$ 20 a R$ 40', 'Mais de R$ 40'] },
+  ] },
+};
+/** Qual pesquisa está pendente hoje ('d3', 'd7' ou null). */
+function pesquisaDevida() {
+  if (!S.startDate) return null;
+  const dias = L.diffDays(S.startDate, today());
+  if (dias >= 6 && !S.survey?.d7) return 'd7';
+  if (dias >= 2 && dias < 6 && !S.survey?.d3) return 'd3';
+  return null;
+}
+function surveySheet(qual) {
+  const P = PESQUISA[qual]; if (!P) return;
+  const resp = {};
+  const q = (p, i) => {
+    let campo = '';
+    if (p.tipo === 'escala') {
+      const ns = []; for (let n = p.de; n <= p.ate; n++) ns.push(n);
+      campo = `<div class="seg" style="flex-wrap:${ns.length > 6 ? 'wrap' : 'nowrap'}">${ns.map((n) => `<button type="button" aria-pressed="false" data-q="${p.k}" data-v="${n}" style="${ns.length > 6 ? 'flex:1 0 15%' : ''}">${n}</button>`).join('')}</div><div class="row" style="justify-content:space-between"><span class="meta">${esc(p.rotulos[0])}</span><span class="meta">${esc(p.rotulos[1])}</span></div>`;
+    } else if (p.tipo === 'opcao') {
+      campo = `<div style="display:flex;flex-direction:column;gap:6px">${p.ops.map((o) => `<button type="button" class="opt" aria-pressed="false" data-q="${p.k}" data-v="${esc(o)}">${esc(o)}</button>`).join('')}</div>`;
+    } else {
+      campo = `<textarea class="field" data-qt="${p.k}" maxlength="800" style="height:80px" placeholder="Se quiser, escreva aqui"></textarea>`;
+    }
+    return `<div class="flabel" style="gap:8px"><span style="color:var(--ink);font-size:15px">${i + 1}. ${esc(p.t)}${p.opcional ? ' <span class="meta">(opcional)</span>' : ''}</span>${campo}</div>`;
+  };
+  sheet(`<div class="row" style="gap:10px">${irisImg(P.mood, 48)}<div class="sub" style="flex:1"><b>${esc(P.titulo)}</b><br>Leva ${qual === 'd7' ? '2 minutos' : '1 minuto'} e me ajuda a ficar melhor pra você.</div></div>
+    ${P.perguntas.map(q).join('')}
+    <p class="err" id="qErr" hidden>Responda as perguntas que não são opcionais.</p>
+    <div class="row"><button class="btn light" type="button" data-qa="depois" style="flex:1">Depois</button><button class="btn" type="button" data-qa="enviar" style="flex:2">Enviar</button></div>`, (el) => {
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-q]');
+      if (b) { resp[b.dataset.q] = b.dataset.v; el.querySelectorAll(`[data-q="${b.dataset.q}"]`).forEach((x) => x.setAttribute('aria-pressed', String(x === b))); el.querySelector('#qErr').hidden = true; return; }
+      const a = e.target.closest('[data-qa]'); if (!a) return;
+      if (a.dataset.qa === 'depois') { closeSheet(); toast('Tá bom, te lembro depois 😉'); return; }
+      el.querySelectorAll('[data-qt]').forEach((t) => { if (t.value.trim()) resp[t.dataset.qt] = t.value.trim().slice(0, 800); });
+      const faltam = P.perguntas.filter((p) => !p.opcional && resp[p.k] == null);
+      if (faltam.length) { el.querySelector('#qErr').hidden = false; return; }
+      if (resp.nps != null) resp.nps = Number(resp.nps);
+      if (resp.facil != null) resp.facil = Number(resp.facil);
+      S.survey = { ...(S.survey || {}), [qual]: { ...resp, em: new Date().toISOString() } };
+      save(); closeSheet(); render(true);
+      toast(qual === 'd7' ? 'Valeu demais! Isso muda o Faiz de verdade 💜' : 'Valeu! Já anotei tudo 😉');
+    });
+  });
+}
+
+/* ---------- Primeiro uso: aviso de teste automático ---------- */
+async function pushCheck() {
+  try { await Cloud.fn('test'); } catch (e) { U.lastError = 'teste de aviso: ' + (e?.code || e?.message); }
+  sheet(`<div class="row" style="gap:10px">${irisImg('pensando', 48)}<div class="sub" style="flex:1"><b>Acabei de te mandar um aviso de teste. Chegou?</b><br>Ele aparece lá em cima ou na Central de Notificações (puxe a tela de cima pra baixo).</div></div>
+    <div class="row"><button class="btn light" type="button" data-pc="nao" style="flex:1">Não chegou</button><button class="btn" type="button" data-pc="sim" style="flex:1">Chegou! 🎉</button></div>`, (el) => {
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-pc]'); if (!b) return;
+      if (b.dataset.pc === 'sim') { S.stats.pushTest = 'chegou'; save(); closeSheet(); toast('Fechou! Agora eu te cobro na hora certa 😏'); return; }
+      S.stats.pushTest = 'não chegou'; save();
+      const dicas = IS_IOS
+        ? ['Abra o Faiz pelo ícone da tela de início (não pelo Safari).', 'Ajustes do iPhone › Notificações › Faiz › Permitir Notificações ligado.', 'Desligue o modo Foco / Não perturbe e teste de novo.']
+        : ['Configurações › Apps › Chrome › Notificações: ligadas.', 'Configurações › Apps › Chrome › Bateria: Sem restrições.', 'Desligue o Não perturbe e teste de novo.'];
+      el.innerHTML = `<div class="row" style="gap:10px">${irisImg('cansada', 48)}<div class="sub" style="flex:1"><b>Poxa! Vamos resolver:</b></div></div>
+        <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:15px">${dicas.map((d) => `<li>${esc(d)}</li>`).join('')}</ol>
+        <button class="btn" type="button" data-pc2="denovo">Testar de novo</button>
+        <button class="btn light" type="button" data-pc2="avisar">Continua sem chegar: avisar o Tiago</button>
+        <button class="linkbtn" type="button" data-pc2="fechar">Fechar</button>`;
+      el.addEventListener('click', (ev) => {
+        const c = ev.target.closest('[data-pc2]'); if (!c) return;
+        if (c.dataset.pc2 === 'denovo') { closeSheet(); pushCheck(); }
+        if (c.dataset.pc2 === 'avisar') { closeSheet(); problemSheet('O aviso de teste não chegou no meu celular.'); }
+        if (c.dataset.pc2 === 'fechar') closeSheet();
+      });
+    });
+  });
+}
+
+/* ---------- Algo deu errado ---------- */
+function problemSheet(texto = '') {
+  sheet(`<div class="row" style="gap:10px">${irisImg('cansada', 48)}<div class="sub" style="flex:1"><b>Algo deu errado?</b><br>Me conta o que aconteceu. Eu mando junto as informações técnicas do seu celular pro Tiago resolver.</div></div>
+    <label class="flabel" for="pbText">O que aconteceu?<textarea class="field" id="pbText" maxlength="2000" placeholder="Ex.: toquei no microfone e nada aconteceu">${esc(texto)}</textarea></label>
+    <p class="err" id="pbErr" hidden></p>
+    <div class="row"><button class="btn light" type="button" id="pbNo" style="flex:1">Cancelar</button><button class="btn" type="button" id="pbYes" style="flex:2">Enviar</button></div>`, (el) => {
+    el.querySelector('#pbNo').onclick = closeSheet;
+    el.querySelector('#pbYes').onclick = async () => {
+      const t = el.querySelector('#pbText').value.trim(), err = el.querySelector('#pbErr');
+      if (!t) { err.hidden = false; err.textContent = 'Escreva o que aconteceu.'; return; }
+      const ctx = { aparelho: S.stats.device, avisos: U.pushState, testeDeAviso: S.stats.pushTest || '', ia: U.aiState, credito: U.aiCredit, ultimoErro: U.lastError || '', tela: U.tab, versao: APP_VERSION, navegador: UA.slice(0, 160), hora: new Date().toISOString() };
+      try { await Cloud.fn('report', { text: t, ctx, name: S.name }); closeSheet(); toast('Mandei pro Tiago. Valeu por avisar! 🛠️'); }
+      catch (e) { err.hidden = false; err.textContent = 'Não consegui mandar agora. Confira a internet e tente de novo.'; }
+    };
+    setTimeout(() => el.querySelector('#pbText').focus(), 60);
+  });
+}
+
 /* ---------- Telas ---------- */
 function progressRing(st, size = 58) {
   const r = size / 2 - 6, C = 2 * Math.PI * r, tot = Math.max(st.total, 1), a = (st.feito / tot) * C, b = (st.andamento / tot) * C;
@@ -949,7 +1066,7 @@ const screens = {
         ${['Você me fala o que precisa, do seu jeito, e eu monto o plano.', 'Você confere antes de eu mexer na agenda.', 'Eu te lembro de tudo no celular (e cobro, se precisar 😏).'].map((t) => `<div class="bul"><span>${I.check}</span><span class="muted">${t}</span></div>`).join('')}
       </div>
       <button class="btn" type="button" data-act="start">Começar</button>
-      <p class="meta" style="margin-top:14px">Versão de teste do Faiz</p>
+      <p class="meta" style="margin-top:14px">Versão de teste: medimos o uso (sem ler suas conversas) e as respostas das pesquisas para melhorar o Faiz.</p>
     </div></main>`;
   },
   hoje() {
@@ -961,6 +1078,7 @@ const screens = {
       <div class="row" style="justify-content:flex-end"><button class="avatar" type="button" data-act="tab" data-v="mais" aria-label="Mais opções">${esc((first || 'F').charAt(0).toUpperCase())}</button></div>
       <div class="meta" style="font-size:15px;margin-top:14px">${esc(L.longDate(d))}</div>
       <h1 class="greeting">${esc(L.greeting(new Date()))}${first ? ', ' + esc(first) : ''} 👋</h1>
+      ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span><b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}
       ${all.length === 0 ? `
         <div class="card empty" style="margin-top:28px">${irisImg('neutra', 72)}<h2 class="screen-title" style="margin-top:6px">Seu dia está livre</h2><p class="muted" style="margin:0">Me conta o que você precisa fazer hoje ou nesta semana que eu organizo os horários.</p></div>
@@ -1046,6 +1164,7 @@ const screens = {
       ${avisosCard()}
       <div class="label">Teste do Faiz</div>
       <div class="card">
+        <button class="setrow" type="button" data-act="problema"><div class="txt"><div class="t">Algo deu errado?</div><div class="meta">Me conta e eu aviso o Tiago na hora.</div></div><span class="pill">Contar</span></button>
         <button class="setrow" type="button" data-act="feedback"><div class="txt"><div class="t">Dar minha opinião</div><div class="meta">Leva 1 minuto e ajuda muito.</div></div><span class="pill navy">Abrir</span></button>
         ${U.owner
           ? `<div class="setrow"><div class="txt"><div class="t">Alertas do teste</div><div class="meta">Ligados neste celular. Você recebe um aviso se o crédito da IA acabar.</div></div></div>${!U.aiCredit ? '<div style="padding:0 16px 14px"><div class="warn"><b>Crédito da IA acabou.</b> A Íris está no modo simples. Recarregue em console.anthropic.com › Billing.</div></div>' : ''}`
@@ -1190,7 +1309,7 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]'); if (!el || !$app.contains(el)) return;
   const a = el.dataset.act, v = el.dataset.v, id = el.dataset.id;
   switch (a) {
-    case 'start': { const n = document.getElementById('nameInput').value.trim(); S.name = n; S.onboarded = true; save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0); break; }
+    case 'start': { const n = document.getElementById('nameInput').value.trim(); S.name = n; S.onboarded = true; S.startDate = today(); save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0); break; }
     case 'skipinstall': S.skipInstall = true; U.showInstall = false; save(); render(); window.scrollTo(0, 0); break;
     case 'showinstall': U.showInstall = true; render(); window.scrollTo(0, 0); break;
     case 'permit': case 'notify': enableNotify(a === 'permit'); break;
@@ -1216,6 +1335,8 @@ document.addEventListener('click', (e) => {
     case 'newtask': newTaskSheet(); break;
     case 'feedback': feedbackSheet(); break;
     case 'owner': ownerSheet(); break;
+    case 'problema': problemSheet(); break;
+    case 'pesquisa': { const q = pesquisaDevida(); if (q) surveySheet(q); break; }
     case 'askbefore': S.settings.askBefore = !S.settings.askBefore; save(); render(true); break;
     case 'mic': Voice.start(); break;
     case 'speak': S.settings.speak = !S.settings.speak; save(); render(true); if (S.settings.speak) Voice.speak('Pronto, vou ler as respostas em voz alta.'); break;

@@ -40,6 +40,7 @@ const db = {
   usage: [] as any[],
   owners: [] as any[],
   status: [] as any[],
+  reports: [] as any[],
 };
 const pushed: any[] = [];
 let pushStatus = 201;
@@ -226,4 +227,18 @@ test('api: crédito acabou → avisa a Íris (no_credit), marca a situação e m
   const ok = await post(api, { action: 'ai', system: 'fixo', prompt: 'oi' }, auth);
   assert.equal(ok.status, 200);
   assert.equal((await (await post(api, { action: 'config' })).json()).aiCredit, true);
+});
+
+test('api: Algo deu errado guarda o relato e avisa o dono', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  db.owners = [{ user_id: U }];
+  db.subs = [{ endpoint: 'https://web.push.apple.com/dono', user_id: U, p256dh: b64u(uaPub), auth: b64u(authS) }];
+  db.reports = []; pushed.length = 0;
+  assert.equal((await post(api, { action: 'report', text: '   ' }, auth)).status, 400);
+  const r = await post(api, { action: 'report', text: 'O microfone não abriu', ctx: { aparelho: 'iPhone', erro: 'not-allowed' }, name: 'Ana Souza' }, auth);
+  assert.equal(r.status, 200);
+  assert.equal(db.reports[0].text, 'O microfone não abriu');
+  assert.deepEqual(db.reports[0].ctx, { aparelho: 'iPhone', erro: 'not-allowed' });
+  assert.equal(pushed.at(-1).title, 'Problema relatado por Ana 🛠️');
+  assert.equal(pushed.at(-1).body, 'O microfone não abriu');
 });

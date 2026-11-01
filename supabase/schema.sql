@@ -59,3 +59,13 @@ create table if not exists public.status (
   updated_at timestamptz not null default now()
 );
 alter table public.status enable row level security;
+
+-- Problemas relatados pelos testadores ("Algo deu errado"). Só o servidor.
+create table if not exists public.reports (
+  id bigserial primary key,
+  user_id uuid not null references auth.users on delete cascade,
+  text text not null,
+  ctx jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.reports enable row level security;
