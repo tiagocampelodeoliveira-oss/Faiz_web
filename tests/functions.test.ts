@@ -183,3 +183,14 @@ test('api: lugares pelo Photon primeiro, num raio pequeno e pelo tipo', async ()
   assert.deepEqual(r.places.map((p: any) => p.nome), ['Benjamin Padaria', 'Padaria Xodó', 'Pão de Ló']);
   photonFeatures = [];
 });
+
+test('api: parte fixa vai em system com cache; sem system, continua funcionando', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  db.usage = [];
+  await post(api, { action: 'ai', system: 'Você é a Íris. Regras fixas.', prompt: 'Pedido: oi' }, auth);
+  assert.deepEqual(anthropicBody.system, [{ type: 'text', text: 'Você é a Íris. Regras fixas.', cache_control: { type: 'ephemeral' } }]);
+  assert.equal(anthropicBody.messages[0].content, 'Pedido: oi');
+  await post(api, { action: 'ai', prompt: 'só o texto' }, auth);
+  assert.equal(anthropicBody.system, undefined);
+  assert.equal(anthropicBody.messages[0].content, 'só o texto');
+});

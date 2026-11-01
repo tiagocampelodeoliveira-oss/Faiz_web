@@ -34,7 +34,7 @@ const frases = [
 {
   const linhas: string[] = [];
   for (const frase of frases) {
-    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', prompt: L.buildPrompt(frase, { now, tasks }, [], { nome: 'Tiago' }) }) });
+    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, { now, tasks }, [], { nome: 'Tiago' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
     const body: any = await r.json().catch(() => ({}));
     let texto = '';
     try { const t = String(body.text || ''); texto = L.aiToReply(JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)), frase, { now, tasks }).text; } catch { texto = `(resposta fora do formato) ${String(body.text || JSON.stringify(body)).slice(0, 120)}`; }

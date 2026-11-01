@@ -72,8 +72,11 @@ if (token) {
       ['cancela a academia de amanhã e coloca corrida às 7', (r) => (r.ops || []).some((o: any) => o.type === 'remove' && o.id === 'acad1') && (r.ops || []).some((o: any) => o.type === 'add' && o.task.start === 420)],
     ];
     const linhas: string[] = [];
+    const caches: any[] = [];
     for (const [frase, ok] of frases) {
-      const res = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', prompt: L.buildPrompt(frase, { now, tasks }) }) });
+      const parts = L.buildPromptParts(frase, { now, tasks });
+      const res = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', system: parts.system, prompt: parts.user }) });
+      caches.push(res.body?.cache || {});
       let r: any = null;
       try { const t = String(res.body?.text || ''); r = L.aiToReply(JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)), frase, { now, tasks }); } catch { /* resposta fora do formato */ }
       const good = !!r && ok(r);
@@ -81,6 +84,8 @@ if (token) {
       linhas.push(`${good ? 'OK' : 'ERROU'} "${frase}" → ${resumo}`);
     }
     console.log(`::warning::FRASES DA IA: ${linhas.join(' ‖ ')}`);
+    const lidos = caches.slice(1).filter((c) => c.read > 0).length;
+    console.log(`${lidos >= 3 ? '::notice::OK ' : '::warning::AVISO '} cache da parte fixa — ${lidos} de 4 pedidos leram do cache ${JSON.stringify(caches)}`);
   }
 
   // 5. Aviso de teste sem celular inscrito

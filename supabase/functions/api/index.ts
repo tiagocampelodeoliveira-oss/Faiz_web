@@ -7,7 +7,7 @@ const AI_DAILY_LIMIT = 40;
 const MODEL = Deno.env.get('FAIZ_AI_MODEL') || 'claude-sonnet-5-5';
 const FALLBACK_MODEL = 'claude-haiku-5-5';
 
-async function ai(userId: string, prompt: unknown): Promise<Response> {
+async function ai(userId: string, prompt: unknown, system: unknown): Promise<Response> {
   if (typeof prompt !== 'string' || !prompt.trim()) return json({ error: 'bad_request' }, 400);
   const key = Deno.env.get('FAIZ_ANTHROPIC_KEY');
   if (!key) return json({ error: 'ai_off' }, 503);
@@ -19,7 +19,13 @@ async function ai(userId: string, prompt: unknown): Promise<Response> {
   const call = (model: string) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: 1500, messages: [{ role: 'user', content: prompt.slice(0, 16000) }] }),
+    body: JSON.stringify({
+      model,
+      max_tokens: 1500,
+      // A parte fixa (persona, formato e regras) vai em cache: a partir do 2º pedido em 5 min, sai ~90% mais barata.
+      ...(typeof system === 'string' && system.trim() ? { system: [{ type: 'text', text: system.slice(0, 20000), cache_control: { type: 'ephemeral' } }] } : {}),
+      messages: [{ role: 'user', content: prompt.slice(0, 16000) }],
+    }),
   });
   let res = await call(MODEL);
   // Se o modelo principal falhar (fora do ar, sobrecarregado), tenta o rápido antes de desistir.
@@ -31,7 +37,8 @@ async function ai(userId: string, prompt: unknown): Promise<Response> {
   }
   const out = await res.json();
   const text = (out.content || []).filter((c: { type: string }) => c.type === 'text').map((c: { text: string }) => c.text).join('');
-  return json({ text, model: out.model || '' });
+  const u = out.usage || {};
+  return json({ text, model: out.model || '', cache: { read: u.cache_read_input_tokens || 0, write: u.cache_creation_input_tokens || 0, input: u.input_tokens || 0 } });
 }
 
 async function subscribe(userId: string, sub: Subscription, ua: string): Promise<Response> {
@@ -143,7 +150,7 @@ Deno.serve(async (req) => {
     }
     const user = await getUser(req);
     if (!user) return json({ error: 'auth' }, 401);
-    if (action === 'ai') return await ai(user.id, body.prompt);
+    if (action === 'ai') return await ai(user.id, body.prompt, body.system);
     if (action === 'subscribe') return await subscribe(user.id, body.subscription, req.headers.get('user-agent') || '');
     if (action === 'test') return await testPush(user.id);
     if (action === 'nearby') return await nearby(body);
