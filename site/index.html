@@ -323,7 +323,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-01 20:43';
+const APP_VERSION = '2026-11-01 20:46';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -389,7 +389,7 @@ function persistLocal() { try { localStorage.setItem(KEY, JSON.stringify({ ...S,
 const today = () => L.dateKey(new Date());
 function markDay() { const d = today(); if (!S.stats.days.includes(d)) { S.stats.days.push(d); save(); } }
 markDay();
-if (S.onboarded && !S.startDate) { S.startDate = today(); save(); }
+if (S.onboarded && !S.startDate) { S.startDate = [...S.stats.days].sort()[0] || today(); save(); }
 if (S.stats.device !== DEVICE) { S.stats.device = DEVICE; save(); }
 
 window.addEventListener('error', (e) => { U.lastError = String(e.message || e.error || '').slice(0, 200); });

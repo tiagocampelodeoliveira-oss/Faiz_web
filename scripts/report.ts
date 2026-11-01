@@ -24,7 +24,7 @@ const pessoas = states
     return {
       nome: String(d.name || '').trim().split(/\s+/)[0] || '(sem nome)',
       dono: owners.has(s.user_id),
-      inicio: d.startDate || null,
+      inicio: d.startDate || [...(st.days || [])].sort()[0] || null,
       ultimoUso: s.updated_at.slice(0, 10),
       aparelho: st.device || '?',
       avisosLigados: subs.has(s.user_id),
