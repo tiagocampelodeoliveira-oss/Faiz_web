@@ -77,13 +77,14 @@ async function nearby(body: Record<string, any>): Promise<Response> {
   const termo = String(body.termo || '').slice(0, 40);
   const here = { lat, lon };
   let places: { nome: string; lat: number; lon: number; dist: number; endereco: string }[] = [];
+  const diag: string[] = [];
   const ua = { 'User-Agent': 'Faiz/1.0 (assistente pessoal; https://github.com/tiagocampelodeoliveira-oss/Faiz_web)' };
   if (osm.length) {
     for (const radius of [2500, 8000]) {
       const sel = osm.map((t) => { const [k, v] = t.split('='); return `nwr["${k}"="${v}"](around:${radius},${lat},${lon});`; }).join('');
       const q = `[out:json][timeout:15];(${sel});out center 40;`;
       const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', headers: { ...ua, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) });
-      if (!r.ok) { console.error('overpass', r.status); break; }
+      if (!r.ok) { diag.push(`overpass ${r.status} ${(await r.text().catch(() => '')).slice(0, 120)}`); break; }
       const j = await r.json();
       places = (j.elements || []).map((e: any) => {
         const p = { lat: e.lat ?? e.center?.lat, lon: e.lon ?? e.center?.lon };
@@ -98,10 +99,11 @@ async function nearby(body: Record<string, any>): Promise<Response> {
     const d = 0.06;
     const u = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&accept-language=pt-BR&bounded=1&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}&q=${encodeURIComponent(termo)}`;
     const r = await fetch(u, { headers: ua });
+    diag.push(`nominatim ${r.status}`);
     if (r.ok) places = ((await r.json()) as any[]).map((e) => ({ nome: e.name || e.display_name.split(',')[0], lat: +e.lat, lon: +e.lon, dist: distM(here, { lat: +e.lat, lon: +e.lon }), endereco: e.display_name.split(',').slice(1, 3).join(',').trim() }));
   }
   places.sort((a, b) => a.dist - b.dist);
-  return json({ places: places.slice(0, 5) });
+  return json({ places: places.slice(0, 5), diag });
 }
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
