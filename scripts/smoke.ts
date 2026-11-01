@@ -71,14 +71,16 @@ if (token) {
       ['marca uma reunião', (r) => !r.ops && /\?/.test(r.text)],
       ['cancela a academia de amanhã e coloca corrida às 7', (r) => (r.ops || []).some((o: any) => o.type === 'remove' && o.id === 'acad1') && (r.ops || []).some((o: any) => o.type === 'add' && o.task.start === 420)],
     ];
+    const linhas: string[] = [];
     for (const [frase, ok] of frases) {
       const res = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', prompt: L.buildPrompt(frase, { now, tasks }) }) });
       let r: any = null;
       try { const t = String(res.body?.text || ''); r = L.aiToReply(JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)), frase, { now, tasks }); } catch { /* resposta fora do formato */ }
       const good = !!r && ok(r);
       const resumo = r ? `${r.text.slice(0, 90)}${r.ops ? ' | ops: ' + r.ops.map((o: any) => o.type + (o.task ? ' ' + o.task.title + ' ' + L.fmtTime(o.task.start ?? 0) : '')).join(', ') : ''}${r.nearby ? ' | busca: ' + r.nearby.osm.join(',') : ''}` : String(res.body?.text || JSON.stringify(res.body)).slice(0, 160);
-      console.log(`${good ? '::notice::IA OK ' : '::warning::IA ERROU '} "${frase}" — ${resumo}`);
+      linhas.push(`${good ? 'OK' : 'ERROU'} "${frase}" → ${resumo}`);
     }
+    console.log(`::warning::FRASES DA IA: ${linhas.join(' ‖ ')}`);
   }
 
   // 5. Aviso de teste sem celular inscrito
