@@ -14,7 +14,7 @@ self.addEventListener('push', (e) => {
     requireInteraction: true, // no Android e no computador, só some quando a pessoa toca
     silent: false,
     vibrate: [200, 100, 200, 100, 400],
-    icon: 'iris/aviso-192.png',
+    icon: 'icon-192.png',
     badge: 'badge-96.png',
     timestamp: Date.now(),
     data: { url: d.url || './' },

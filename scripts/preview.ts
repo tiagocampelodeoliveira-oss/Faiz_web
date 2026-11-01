@@ -31,15 +31,15 @@ const frases = [
   'to com preguiça de estudar hoje',
   'tô muito triste hoje, terminei meu namoro',
 ];
-for (const nivel of ['na_boa', 'sincerona', 'sem_do']) {
+{
   const linhas: string[] = [];
   for (const frase of frases) {
-    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', prompt: L.buildPrompt(frase, { now, tasks }, [], { nivel, nome: 'Tiago' }) }) });
+    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'ai', prompt: L.buildPrompt(frase, { now, tasks }, [], { nome: 'Tiago' }) }) });
     const body: any = await r.json().catch(() => ({}));
     let texto = '';
     try { const t = String(body.text || ''); texto = L.aiToReply(JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)), frase, { now, tasks }).text; } catch { texto = `(resposta fora do formato) ${String(body.text || JSON.stringify(body)).slice(0, 120)}`; }
     linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
   }
-  console.log(`::warning::ÍRIS ${nivel.toUpperCase()}: ${linhas.join(' ‖ ')}`);
+  console.log(`::warning::ÍRIS: ${linhas.join(' ‖ ')}`);
 }
 await fetch(`${URL_}/auth/v1/admin/users/${su.user.id}`, { method: 'DELETE', headers: service.startsWith('sb_') ? { apikey: service } : { apikey: service, Authorization: `Bearer ${service}` } });

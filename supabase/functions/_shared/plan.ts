@@ -18,12 +18,10 @@ export type NotifySettings = {
   night?: string | null; // 'HH:MM' ou null (desligado)
 };
 
-export type Sinceridade = 'na_boa' | 'sincerona' | 'sem_do';
-
 export type AppState = {
   name?: string;
   tasks?: Task[];
-  settings?: { tz?: string; notify?: NotifySettings; sinceridade?: Sinceridade };
+  settings?: { tz?: string; notify?: NotifySettings };
 };
 
 export type Notice = { key: string; title: string; body: string; url: string; tag: string };
@@ -72,34 +70,14 @@ export function missedStreak(tasks: Task[], title: string, date: string): number
   return streak;
 }
 
-/** As falas da Íris nos avisos, por nível de sinceridade. Variações escolhidas por tarefa (pick). */
+/** As falas da Íris nos avisos: amiga direta que cobra com humor. Variações escolhidas por tarefa (pick). */
 const IRIS = {
-  antes: {
-    na_boa: ['Você consegue! 💜', 'Te aviso de novo na hora.', 'Respira e bora!'],
-    sincerona: ['Já vai separando o que precisa, hein!', 'Te aviso de novo na hora 😉', 'Bora, sem enrolar!'],
-    sem_do: ['Já vai se mexendo, que eu tô de olho 👀', 'Nem pensa em furar, hein.', 'Levanta daí que tá chegando a hora!'],
-  },
-  naHora: {
-    na_boa: (t: string, n: string) => [`Hora de ${n}! 💪`, `Começou: ${n} 💜`, `${t} agora! Você consegue`],
-    sincerona: (t: string, n: string) => ['E aí, vai ou não vai? 😅', `Hora de ${n}! Bora?`, `Bora? ${t} é agora 😅`],
-    sem_do: (t: string) => [`Tá de sacanagem? ${t} era agora 🙄`, `Deixa de enrolação: ${t} começou!`, `Ô, cadê você? ${t} já começou 😤`],
-  },
-  furando: {
-    na_boa: () => ' Sei que tá corrido, mas essa é importante 💜',
-    sincerona: (k: number) => ` Já é a ${k + 1}ª vez seguida, hein 👀`,
-    sem_do: (k: number) => ` ${k} dias furando. Hoje não tem desculpa!`,
-  },
-  lembrete: {
-    na_boa: 'Agora é a hora! Toque para marcar como feito.',
-    sincerona: 'Não deixa pra depois 😉 Toque para marcar como feito.',
-    sem_do: 'Agora, não amanhã. Toque para marcar como feito.',
-  },
-  insiste: {
-    na_boa: ['Passando pra lembrar de novo 💜', 'Só um lembrete carinhoso 💜', 'Ainda dá tempo 💜'],
-    sincerona: ['Ainda não deu? 👀', 'Psiu, esqueceu de mim? 🙃', 'Só passando pra cobrar de novo 🙃'],
-    sem_do: ['Vai me ignorar mesmo? 🙄', 'Ainda não fez? Sério? 😤', 'Tô esperando, viu? 😤'],
-  },
-  bomDia: { na_boa: ' Vai dar tudo certo 💜', sincerona: ' Bora?', sem_do: ' Levanta que o dia não espera!' },
+  antes: ['Já vai se mexendo, que eu tô de olho 👀', 'Nem pensa em furar, hein.', 'Levanta daí que tá chegando a hora!'],
+  naHora: (t: string) => [`Tá de sacanagem? ${t} era agora 🙄`, `Deixa de enrolação: ${t} começou!`, `Ô, cadê você? ${t} já começou 😤`],
+  furando: (k: number) => ` ${k} dias furando. Hoje não tem desculpa!`,
+  lembrete: 'Agora, não amanhã. Toque para marcar como feito.',
+  insiste: ['Vai me ignorar mesmo? 🙄', 'Ainda não fez? Sério? 😤', 'Tô esperando, viu? 😤'],
+  bomDia: ' Levanta que o dia não espera!',
 };
 
 /** Avisos devidos agora. `sent` = chaves já enviadas (para nunca repetir). */
@@ -111,7 +89,6 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   const lead = Math.max(0, Math.min(120, Number.isFinite(ns.lead as number) ? (ns.lead as number) : 10));
   const today = (state.tasks ?? []).filter((t) => t && t.date === date).sort(byTime);
   const open = today.filter((t) => t.status !== 'feito');
-  const nivel: Sinceridade = (['na_boa', 'sincerona', 'sem_do'] as const).includes(state.settings?.sinceridade as Sinceridade) ? state.settings!.sinceridade! : 'sincerona';
   const all = state.tasks ?? [];
   const out: Notice[] = [];
   const add = (n: Notice) => { if (!sent.has(n.key)) out.push(n); };
@@ -120,7 +97,6 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   for (const t of open) {
     if (t.start == null) continue;
     const isReminder = t.tag === 'Lembrete';
-    const name = lcFirst(t.title);
     const v = pick(t.id);
     const next = open.find((o) => o.start != null && o.start > t.start! && o.id !== t.id);
     const url = `./?t=${encodeURIComponent(t.id)}`, tag = `t-${t.id}`;
@@ -128,10 +104,10 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     if (isReminder) {
       // na hora exata
       if (min >= t.start && min < t.start + 30)
-        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: IRIS.lembrete[nivel], url, tag });
+        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: IRIS.lembrete, url, tag });
       // ainda não fez? insiste uma vez
       else if (min >= t.start + 30 && min < t.start + 60)
-        add({ key: `${base}:r2`, title: IRIS.insiste[nivel].at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag });
+        add({ key: `${base}:r2`, title: IRIS.insiste.at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag });
       continue;
     }
     // antes de começar
@@ -140,14 +116,14 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
       add({
         key: `${base}:${lead}`,
         title: `${t.title} em ${left} min ⏰`,
-        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${IRIS.antes[nivel].at(v)}`,
+        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${IRIS.antes.at(v)}`,
         url, tag,
       });
     }
     // na hora: se ainda não marcou como feito
     else if (min >= t.start && min < t.start + 20 && t.status !== 'andamento') {
       const k = missedStreak(all, t.title, t.date);
-      add({ key: `${base}:s`, title: IRIS.naHora[nivel](t.title, name).at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.${k >= 2 ? IRIS.furando[nivel](k) : ''}`, url, tag });
+      add({ key: `${base}:s`, title: IRIS.naHora(t.title).at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.${k >= 2 ? IRIS.furando(k) : ''}`, url, tag });
     }
   }
 
@@ -160,7 +136,7 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const body = items.length
       ? `Hoje: ${joinPt(shown)}${items.length > 4 ? ` e mais ${items.length - 4}` : ''}.`
       : 'Seu dia está livre. Me conta o que você precisa e eu organizo.';
-    add({ key: `m:${date}`, title: `Bom dia${first ? ', ' + first : ''}! ☀️`, body: items.length ? body + IRIS.bomDia[nivel] : body, url: './', tag: 'manha' });
+    add({ key: `m:${date}`, title: `Bom dia${first ? ', ' + first : ''}! ☀️`, body: items.length ? body + IRIS.bomDia : body, url: './', tag: 'manha' });
   }
 
   // 3. Revisão da noite (padrão 21:00): só se houve algo no dia.
@@ -171,8 +147,6 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const lista = `${joinPt(pend.slice(0, 3))}${pend.length > 3 ? ` e mais ${pend.length - 3}` : ''}`;
     let title: string, body: string;
     if (!pend.length) { title = 'Arrasou! 🎉'; body = `Você fez tudo hoje (${done} de ${today.length}). Orgulho!`; }
-    else if (nivel === 'na_boa') { title = 'Como foi seu dia? 💜'; body = `Você fez ${done} de ${today.length}. Ficou pendente: ${lista}. Quer que eu remarque?`; }
-    else if (nivel === 'sincerona') { title = 'Fechamento do dia 📋'; body = `Você fez ${done} de ${today.length}. Ficou pra trás: ${lista}. Bora remarcar?`; }
     else { title = 'Hora da verdade 😤'; body = done ? `${done} de ${today.length}. Ficou pra trás: ${lista}. Amanhã sem desculpa, combinado?` : `Zero de ${today.length} hoje? Ficou tudo pra trás: ${lista}. Amanhã a gente recupera, sem desculpa!`; }
     add({ key: `n:${date}`, title, body, url: './?v=noite', tag: 'noite' });
   }
