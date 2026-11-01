@@ -104,19 +104,25 @@ async function nearby(body: Record<string, any>): Promise<Response> {
       if (places.length >= 3) break;
     }
   }
-  if (!places.length && termo) {
-    // Busca por nome perto da pessoa (Photon, do OpenStreetMap).
-    try {
-      const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(termo)}&lat=${lat}&lon=${lon}&limit=15`, { headers: { ...ua, Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
-      if (r.ok) {
+  if (!places.length && (termo || osm.length)) {
+    // Reserva: Photon (OpenStreetMap), num quadrado em volta da pessoa, filtrando pelo tipo de lugar.
+    const tags = osm.map((t) => 'osm_tag=' + encodeURIComponent(t.replace('=', ':'))).join('&');
+    for (const d of [0.025, 0.07]) {
+      try {
+        const bbox = [lon - d, lat - d, lon + d, lat + d].map((x) => x.toFixed(5)).join(',');
+        const q = encodeURIComponent(termo || osm[0].split('=')[1]);
+        const r = await fetch(`https://photon.komoot.io/api/?q=${q}&lat=${lat}&lon=${lon}&bbox=${bbox}&limit=30${tags ? '&' + tags : ''}`, { headers: { ...ua, Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+        if (!r.ok) { diag.push(`photon ${r.status}`); break; }
         const j = await r.json();
         places = (j.features || []).map((f: any) => {
           const [plon, plat] = f.geometry?.coordinates || [];
           const pr = f.properties || {};
           return { nome: pr.name || cap(termo), lat: plat, lon: plon, dist: distM(here, { lat: plat, lon: plon }), endereco: [pr.street, pr.housenumber].filter(Boolean).join(', ') };
-        }).filter((p: any) => Number.isFinite(p.lat) && p.dist <= 10000);
-      } else diag.push(`photon ${r.status}`);
-    } catch (e) { diag.push(`photon ${String((e as Error).name)}`); }
+        }).filter((p: any) => Number.isFinite(p.lat));
+        diag.push(`photon ${d} ${places.length}`);
+        if (places.length >= 3) break;
+      } catch (e) { diag.push(`photon ${String((e as Error).name)}`); break; }
+    }
   }
   places.sort((a, b) => a.dist - b.dist);
   return json({ places: places.slice(0, 5), diag });
