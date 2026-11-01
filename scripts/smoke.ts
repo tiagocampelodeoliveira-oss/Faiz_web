@@ -51,7 +51,7 @@ if (token) {
   // 4b. Lugares perto (OpenStreetMap). Serviço de terceiros: falha vira aviso, não trava a publicação.
   const nb = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'nearby', lat: -23.5614, lon: -46.6559, termo: 'padaria', osm: ['shop=bakery'] }) });
   const nOk = nb.status === 200 && Array.isArray(nb.body?.places) && nb.body.places.length > 0;
-  console.log(`${nOk ? '::notice::OK ' : '::warning::AVISO '} padarias perto da Av. Paulista — ${nOk ? nb.body.places.map((p: any) => `${p.nome} ${p.dist} m`).slice(0, 3).join('; ') : JSON.stringify(nb.body).slice(0, 400)}`);
+  console.log(`${nOk ? '::notice::OK ' : '::warning::AVISO '} padarias perto da Av. Paulista — ${nOk ? nb.body.places.map((p: any) => `${p.nome} ${p.dist} m`).slice(0, 3).join('; ') + ' | ' + (nb.body.diag || []).join(', ') : JSON.stringify(nb.body).slice(0, 400)}`);
 
   // 5. Aviso de teste sem celular inscrito
   const t = await call(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'test' }) });
