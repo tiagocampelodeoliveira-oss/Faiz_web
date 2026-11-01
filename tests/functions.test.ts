@@ -45,6 +45,8 @@ let anthropicBody: any = null;
 const models: string[] = [];
 let sonnetDown = false;
 let overpassQuery = '';
+let photonUrl = '';
+let photonFeatures: any[] = [];
 globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
   const url = new URL(input);
   const method = init.method || 'GET';
@@ -54,6 +56,7 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
     if (sonnetDown && anthropicBody.model === 'claude-sonnet-5-5') return new Response('{"error":"overloaded"}', { status: 529 });
     return Response.json({ content: [{ type: 'text', text: '{"acao":"conversa","resposta":"Oi"}' }] });
   }
+  if (url.host === 'photon.komoot.io') { photonUrl = String(input); return Response.json({ features: photonFeatures }); }
   if (url.host === 'overpass-api.de') {
     overpassQuery = decodeURIComponent(String(init.body).slice(5));
     return Response.json({ elements: [
@@ -163,4 +166,20 @@ test('api: padaria mais próxima, ordenada por distância', async () => {
   assert.equal(r.places[0].endereco, 'Rua A, 10');
   assert.ok(r.places[0].dist < 50, String(r.places[0].dist));
   assert.equal((await post(api, { action: 'nearby', lat: 'x', lon: 1 }, auth)).status, 400);
+});
+
+test('api: lugares pelo Photon primeiro, num raio pequeno e pelo tipo', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  overpassQuery = '';
+  photonFeatures = [
+    { geometry: { coordinates: [-46.6560, -23.5630] }, properties: { name: 'Padaria Xodó', street: 'Rua Augusta', housenumber: '5' } },
+    { geometry: { coordinates: [-46.6545, -23.5610] }, properties: { name: 'Benjamin Padaria' } },
+    { geometry: { coordinates: [-46.6600, -23.5650] }, properties: { name: 'Pão de Ló' } },
+  ];
+  const r = await (await post(api, { action: 'nearby', lat: -23.5614, lon: -46.6559, termo: 'padaria', osm: ['shop=bakery'] }, auth)).json();
+  assert.match(photonUrl, /osm_tag=shop%3Abakery/);
+  assert.match(photonUrl, /bbox=-46\.68090,-23\.58640,-46\.63090,-23\.53640/);
+  assert.equal(overpassQuery, '', 'com 3 resultados, não chama o Overpass');
+  assert.deepEqual(r.places.map((p: any) => p.nome), ['Benjamin Padaria', 'Padaria Xodó', 'Pão de Ló']);
+  photonFeatures = [];
 });

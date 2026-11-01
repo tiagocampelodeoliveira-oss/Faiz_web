@@ -79,32 +79,18 @@ async function nearby(body: Record<string, any>): Promise<Response> {
   let places: { nome: string; lat: number; lon: number; dist: number; endereco: string }[] = [];
   const diag: string[] = [];
   const ua = { 'User-Agent': 'Faiz/1.0 (assistente pessoal; https://github.com/tiagocampelodeoliveira-oss/Faiz_web)' };
-  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
   async function overpass(q: string): Promise<any | null> {
     for (const url of OVERPASS) {
       try {
-        const r = await fetch(url, { method: 'POST', headers: { ...ua, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(12000) });
+        const r = await fetch(url, { method: 'POST', headers: { ...ua, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(6000) });
         if (r.ok) return await r.json();
         diag.push(`${new URL(url).host} ${r.status}`);
       } catch (e) { diag.push(`${new URL(url).host} ${String((e as Error).name)}`); }
     }
     return null;
   }
-  if (osm.length) {
-    for (const radius of [2500, 8000]) {
-      const sel = osm.map((t) => { const [k, v] = t.split('='); return `nwr["${k}"="${v}"](around:${radius},${lat},${lon});`; }).join('');
-      const j = await overpass(`[out:json][timeout:15];(${sel});out center 40;`);
-      if (!j) break;
-      places = (j.elements || []).map((e: any) => {
-        const p = { lat: e.lat ?? e.center?.lat, lon: e.lon ?? e.center?.lon };
-        const t = e.tags || {};
-        const end = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(', ');
-        return { nome: t.name || t.brand || cap(termo) || 'Sem nome', lat: p.lat, lon: p.lon, dist: distM(here, p), endereco: end };
-      }).filter((p: any) => Number.isFinite(p.lat));
-      if (places.length >= 3) break;
-    }
-  }
-  if (!places.length && (termo || osm.length)) {
+  if (termo || osm.length) {
     // Reserva: Photon (OpenStreetMap), num quadrado em volta da pessoa, filtrando pelo tipo de lugar.
     const tags = osm.map((t) => 'osm_tag=' + encodeURIComponent(t.replace('=', ':'))).join('&');
     for (const d of [0.025, 0.07]) {
@@ -123,6 +109,22 @@ async function nearby(body: Record<string, any>): Promise<Response> {
         if (places.length >= 3) break;
       } catch (e) { diag.push(`photon ${String((e as Error).name)}`); break; }
     }
+  }
+  if (places.length < 3 && osm.length) {
+    const prev = places;
+    for (const radius of [2500, 8000]) {
+      const sel = osm.map((t) => { const [k, v] = t.split('='); return `nwr["${k}"="${v}"](around:${radius},${lat},${lon});`; }).join('');
+      const j = await overpass(`[out:json][timeout:15];(${sel});out center 40;`);
+      if (!j) { places = prev; break; }
+      places = (j.elements || []).map((e: any) => {
+        const p = { lat: e.lat ?? e.center?.lat, lon: e.lon ?? e.center?.lon };
+        const t = e.tags || {};
+        const end = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(', ');
+        return { nome: t.name || t.brand || cap(termo) || 'Sem nome', lat: p.lat, lon: p.lon, dist: distM(here, p), endereco: end };
+      }).filter((p: any) => Number.isFinite(p.lat));
+      if (places.length >= 3) break;
+    }
+    if (places.length < prev.length) places = prev;
   }
   places.sort((a, b) => a.dist - b.dist);
   return json({ places: places.slice(0, 5), diag });
