@@ -51,6 +51,8 @@ function joinPt(xs: string[]): string {
 const lcFirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 const range = (t: Task) => (t.start == null ? '' : t.end != null && t.end > t.start ? `${fmt(t.start)}–${fmt(t.end)}` : fmt(t.start));
 const byTime = (a: Task, b: Task) => (a.start ?? 9999) - (b.start ?? 9999);
+/** Escolhe sempre a mesma variação de texto para a mesma tarefa (0, 1 ou 2). */
+const pick = (id: string) => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 3; };
 
 /** Avisos devidos agora. `sent` = chaves já enviadas (para nunca repetir). */
 export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notice[] {
@@ -64,24 +66,38 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   const out: Notice[] = [];
   const add = (n: Notice) => { if (!sent.has(n.key)) out.push(n); };
 
-  // 1. Cada atividade com horário: `lead` minutos antes (lembretes: na hora exata).
+  // 1. Cada atividade com horário. Como uma governanta: avisa antes, cobra na hora e, se for lembrete, insiste.
   for (const t of open) {
     if (t.start == null) continue;
     const isReminder = t.tag === 'Lembrete';
-    const at = isReminder ? t.start : t.start - lead;
-    const until = isReminder ? t.start + 30 : t.start; // janela para não perder se o servidor atrasar
-    if (min < at || min > until) continue;
-    const left = t.start - min;
+    const name = lcFirst(t.title);
+    const v = pick(t.id);
     const next = open.find((o) => o.start != null && o.start > t.start! && o.id !== t.id);
-    let title: string, body: string;
+    const url = `./?t=${encodeURIComponent(t.id)}`, tag = `t-${t.id}`;
+    const base = `t:${t.id}:${t.date}:${t.start}`;
     if (isReminder) {
-      title = `Lembrete: ${t.title}`;
-      body = `Agora, ${fmt(t.start)}. Toque para marcar como feito ou adiar.`;
-    } else {
-      title = left <= 0 ? `Agora: ${t.title}` : `${t.title} em ${left} min`;
-      body = `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} Toque para marcar como feito ou adiar.`;
+      // na hora exata
+      if (min >= t.start && min < t.start + 30)
+        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: ['Agora é a hora! Toque para marcar como feito ou adiar.', 'Não deixa pra depois 😉 Toque para marcar como feito.', 'Bora resolver isso agora? Toque para marcar como feito.'].at(v)!, url, tag });
+      // ainda não fez? insiste uma vez
+      else if (min >= t.start + 30 && min < t.start + 60)
+        add({ key: `${base}:r2`, title: ['Ainda não deu? 👀', 'Psiu, esqueceu de mim? 🙃', 'Só passando pra lembrar de novo 🙏'].at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag });
+      continue;
     }
-    add({ key: `t:${t.id}:${t.date}:${t.start}:${isReminder ? 'r' : lead}`, title, body, url: `./?t=${encodeURIComponent(t.id)}`, tag: `t-${t.id}` });
+    // antes de começar
+    if (min >= t.start - lead && min < t.start) {
+      const left = t.start - min;
+      add({
+        key: `${base}:${lead}`,
+        title: `${t.title} em ${left} min ⏰`,
+        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${['Já vai se preparando!', 'Te aviso de novo na hora.', 'Separa o que precisa e bora!'].at(v)}`,
+        url, tag,
+      });
+    }
+    // na hora: se ainda não marcou como feito
+    else if (min >= t.start && min < t.start + 20 && t.status !== 'andamento') {
+      add({ key: `${base}:s`, title: [`Hora de ${name}! 💪`, `Começou: ${name} 🚀`, `${t.title} agora! Bora?`].at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.`, url, tag });
+    }
   }
 
   // 2. Resumo da manhã (padrão 07:30), com até 1 hora de tolerância.
@@ -93,7 +109,7 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const body = items.length
       ? `Hoje: ${joinPt(shown)}${items.length > 4 ? ` e mais ${items.length - 4}` : ''}.`
       : 'Seu dia está livre. Me conte o que você precisa fazer e eu organizo.';
-    add({ key: `m:${date}`, title: `Bom dia${first ? ', ' + first : ''} 👋`, body, url: './', tag: 'manha' });
+    add({ key: `m:${date}`, title: `Bom dia${first ? ', ' + first : ''} ☀️`, body: items.length ? body + ' Vamos nessa?' : body, url: './', tag: 'manha' });
   }
 
   // 3. Revisão da noite (padrão 21:00): só se houve algo no dia.

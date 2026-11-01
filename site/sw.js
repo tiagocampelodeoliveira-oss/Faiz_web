@@ -1,4 +1,5 @@
 // Service worker do Faiz: recebe os avisos do servidor e abre o app no lugar certo ao tocar.
+// Os avisos ficam no celular até a pessoa tocar e abrir o Faiz (o app limpa os avisos ao abrir).
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
@@ -10,8 +11,12 @@ self.addEventListener('push', (e) => {
     body: d.body || '',
     tag: d.tag || undefined,
     renotify: !!d.tag,
+    requireInteraction: true, // no Android e no computador, só some quando a pessoa toca
+    silent: false,
+    vibrate: [200, 100, 200, 100, 400],
     icon: 'icon-192.png',
     badge: 'badge-96.png',
+    timestamp: Date.now(),
     data: { url: d.url || './' },
   }));
 });

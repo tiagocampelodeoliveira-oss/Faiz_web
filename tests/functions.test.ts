@@ -42,11 +42,26 @@ const db = {
 const pushed: any[] = [];
 let pushStatus = 201;
 let anthropicBody: any = null;
+const models: string[] = [];
+let sonnetDown = false;
+let overpassQuery = '';
 globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
   const url = new URL(input);
   const method = init.method || 'GET';
   if (url.host === 'web.push.apple.com') { pushed.push(await open(init.body as Uint8Array)); return new Response('', { status: pushStatus }); }
-  if (url.host === 'api.anthropic.com') { anthropicBody = JSON.parse(String(init.body)); return Response.json({ content: [{ type: 'text', text: '{"acao":"conversa","resposta":"Oi"}' }] }); }
+  if (url.host === 'api.anthropic.com') {
+    anthropicBody = JSON.parse(String(init.body)); models.push(anthropicBody.model);
+    if (sonnetDown && anthropicBody.model === 'claude-sonnet-5-5') return new Response('{"error":"overloaded"}', { status: 529 });
+    return Response.json({ content: [{ type: 'text', text: '{"acao":"conversa","resposta":"Oi"}' }] });
+  }
+  if (url.host === 'overpass-api.de') {
+    overpassQuery = decodeURIComponent(String(init.body).slice(5));
+    return Response.json({ elements: [
+      { type: 'node', lat: -23.5600, lon: -46.6600, tags: { name: 'Padaria Longe', 'addr:street': 'Rua B' } },
+      { type: 'way', center: { lat: -23.5506, lon: -46.6334 }, tags: { name: 'Padaria Perto', 'addr:street': 'Rua A', 'addr:housenumber': '10' } },
+      { type: 'node', lat: -23.5520, lon: -46.6350, tags: {} },
+    ] });
+  }
   if (url.pathname === '/auth/v1/user') return (init.headers as any).Authorization === 'Bearer user-token' ? Response.json({ id: U }) : new Response('{}', { status: 401 });
   const table = url.pathname.replace('/rest/v1/', '') as keyof typeof db;
   assert.equal((init.headers as any).apikey, 'service-jwt', 'servidor usa a chave de serviço');
@@ -79,7 +94,9 @@ test('relógio manda o aviso da corrida às 18:20, e só uma vez', async () => {
   setNow('2026-10-29T21:20:00Z'); // 18:20 em Brasília
   const r = await (await post(tick, {}, { 'x-tick-secret': 's3cret' })).json();
   assert.equal(r.sent, 1, JSON.stringify(r));
-  assert.deepEqual(pushed[0], { title: 'Corrida em 10 min', body: '18:30–19:30. Toque para marcar como feito ou adiar.', url: './?t=b', tag: 't-b' });
+  assert.equal(pushed[0].title, 'Corrida em 10 min ⏰');
+  assert.match(pushed[0].body, /^18:30–19:30\. /);
+  assert.equal(pushed[0].url, './?t=b');
   const r2 = await (await post(tick, {}, { 'x-tick-secret': 's3cret' })).json();
   assert.equal(r2.sent, 0);
   assert.equal(pushed.length, 1);
@@ -121,8 +138,29 @@ test('api: IA chama o modelo e devolve o texto; respeita o limite diário', asyn
   const auth = { Authorization: 'Bearer user-token' };
   const r = await (await post(api, { action: 'ai', prompt: 'quero correr amanhã' }, auth)).json();
   assert.equal(r.text, '{"acao":"conversa","resposta":"Oi"}');
-  assert.equal(anthropicBody.model, 'claude-haiku-5-5');
+  assert.equal(anthropicBody.model, 'claude-sonnet-5-5');
   db.usage = [{ n: 40 }];
   assert.equal((await post(api, { action: 'ai', prompt: 'de novo' }, auth)).status, 429);
   Date.now = realNow;
+});
+
+test('api: se o Sonnet falhar, usa o modelo rápido', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  db.usage = [];
+  sonnetDown = true; models.length = 0;
+  const r = await (await post(api, { action: 'ai', prompt: 'oi' }, auth)).json();
+  sonnetDown = false;
+  assert.deepEqual(models, ['claude-sonnet-5-5', 'claude-haiku-5-5']);
+  assert.equal(r.text, '{"acao":"conversa","resposta":"Oi"}');
+});
+
+test('api: padaria mais próxima, ordenada por distância', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  const r = await (await post(api, { action: 'nearby', lat: -23.5505, lon: -46.6333, termo: 'padaria', osm: ['shop=bakery', 'x"];out;'] }, auth)).json();
+  assert.match(overpassQuery, /nwr\["shop"="bakery"\]\(around:2500,-23.5505,-46.6333\)/);
+  assert.doesNotMatch(overpassQuery, /out;"/);
+  assert.deepEqual(r.places.map((p: any) => p.nome), ['Padaria Perto', 'Padaria', 'Padaria Longe']);
+  assert.equal(r.places[0].endereco, 'Rua A, 10');
+  assert.ok(r.places[0].dist < 50, String(r.places[0].dist));
+  assert.equal((await post(api, { action: 'nearby', lat: 'x', lon: 1 }, auth)).status, 400);
 });

@@ -100,8 +100,8 @@ test('fuso horário de São Paulo', () => {
 test('10 minutos antes da atividade, com o que vem depois', () => {
   const n = dueNotices(base, at('2026-10-29', '18:20'), new Set());
   assert.deepEqual(keys(n), ['t:b:2026-10-29:1110:10']);
-  assert.equal(n[0].title, 'Corrida em 10 min');
-  assert.match(n[0].body, /18:30–19:30\. Depois, jantar com a Ana às 21:00\./);
+  assert.equal(n[0].title, 'Corrida em 10 min ⏰');
+  assert.match(n[0].body, /18:30–19:30\. Depois, jantar com a Ana às 21:00\. /);
   assert.equal(n[0].url, './?t=b');
 });
 
@@ -110,34 +110,47 @@ test('não repete o que já foi enviado; antes da hora, nada', () => {
   assert.deepEqual(dueNotices(base, at('2026-10-29', '18:19'), new Set()), []);
 });
 
-test('servidor atrasado ainda avisa até o início; depois do início, não', () => {
-  assert.equal(dueNotices(base, at('2026-10-29', '18:30'), new Set())[0].title, 'Agora: Corrida');
-  assert.deepEqual(dueNotices(base, at('2026-10-29', '18:31'), new Set()), []);
+test('servidor atrasado ainda avisa antes do início', () => {
+  assert.equal(dueNotices(base, at('2026-10-29', '18:29'), new Set())[0].title, 'Corrida em 1 min ⏰');
 });
 
-test('lembrete toca na hora exata', () => {
+test('na hora, se não marcou como feito, cobra de novo (uma vez); depois de 20 min, para', () => {
+  const n = dueNotices(base, at('2026-10-29', '18:30'), new Set(['t:b:2026-10-29:1110:10']));
+  assert.deepEqual(keys(n), ['t:b:2026-10-29:1110:s']);
+  assert.match(n[0].title, /corrida|Corrida/);
+  assert.match(n[0].body, /adiar 15 min/);
+  assert.deepEqual(dueNotices(base, at('2026-10-29', '18:35'), new Set(['t:b:2026-10-29:1110:s'])), []);
+  assert.deepEqual(dueNotices(base, at('2026-10-29', '18:50'), new Set()), []);
+});
+
+test('lembrete toca na hora exata e insiste 30 min depois se não foi feito', () => {
   const n = dueNotices(base, at('2026-10-29', '15:00'), new Set());
   assert.equal(n[0].title, 'Lembrete: Beber água');
   assert.deepEqual(dueNotices(base, at('2026-10-29', '14:55'), new Set()), []);
+  const again = dueNotices(base, at('2026-10-29', '15:30'), new Set(['t:d:2026-10-29:900:r']));
+  assert.deepEqual(keys(again), ['t:d:2026-10-29:900:r2']);
+  assert.match(again[0].body, /Beber água\. Toque/);
+  const done: AppState = { ...base, tasks: base.tasks!.map((t) => (t.id === 'd' ? { ...t, status: 'feito' } : t)) };
+  assert.deepEqual(dueNotices(done, at('2026-10-29', '15:30'), new Set()), []);
 });
 
 test('adiar (novo horário) gera um aviso novo; concluído não avisa', () => {
   const s: AppState = { ...base, tasks: base.tasks!.map((t) => (t.id === 'b' ? { ...t, start: 1125, end: 1185 } : t)) };
-  assert.deepEqual(keys(dueNotices(s, at('2026-10-29', '18:35'), new Set(['t:b:2026-10-29:1110:10']))), ['t:b:2026-10-29:1125:10']);
+  assert.deepEqual(keys(dueNotices(s, at('2026-10-29', '18:35'), new Set(['t:b:2026-10-29:1110:10', 't:b:2026-10-29:1110:s']))), ['t:b:2026-10-29:1125:10']);
   const done: AppState = { ...base, tasks: base.tasks!.map((t) => (t.id === 'b' ? { ...t, status: 'feito' } : t)) };
   assert.deepEqual(dueNotices(done, at('2026-10-29', '18:20'), new Set()), []);
 });
 
 test('antecedência escolhida pela pessoa', () => {
   const s: AppState = { ...base, settings: { tz: SP, notify: { lead: 30 } } };
-  assert.equal(dueNotices(s, at('2026-10-29', '18:00'), new Set())[0].title, 'Corrida em 30 min');
+  assert.equal(dueNotices(s, at('2026-10-29', '18:00'), new Set())[0].title, 'Corrida em 30 min ⏰');
 });
 
 test('resumo da manhã às 07:30 com o primeiro nome', () => {
   const n = dueNotices(base, at('2026-10-29', '07:30'), new Set());
   assert.deepEqual(keys(n), ['m:2026-10-29']);
-  assert.equal(n[0].title, 'Bom dia, Tiago 👋');
-  assert.equal(n[0].body, 'Hoje: beber água às 15:00, corrida às 18:30, jantar com a Ana às 21:00 e estudar inglês.');
+  assert.equal(n[0].title, 'Bom dia, Tiago ☀️');
+  assert.equal(n[0].body, 'Hoje: beber água às 15:00, corrida às 18:30, jantar com a Ana às 21:00 e estudar inglês. Vamos nessa?');
   assert.deepEqual(dueNotices(base, at('2026-10-29', '07:29'), new Set()), []);
 });
 
@@ -157,6 +170,6 @@ test('avisos desligados, ou manhã e noite desligadas', () => {
 
 test('dia livre: resumo da manhã convida a planejar; noite não manda nada', () => {
   const s: AppState = { name: '', settings: { tz: SP }, tasks: [] };
-  assert.equal(dueNotices(s, at('2026-10-29', '07:45'), new Set())[0].title, 'Bom dia 👋');
+  assert.equal(dueNotices(s, at('2026-10-29', '07:45'), new Set())[0].title, 'Bom dia ☀️');
   assert.deepEqual(dueNotices(s, at('2026-10-29', '21:10'), new Set()), []);
 });
