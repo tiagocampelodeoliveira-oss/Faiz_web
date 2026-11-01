@@ -79,13 +79,22 @@ async function nearby(body: Record<string, any>): Promise<Response> {
   let places: { nome: string; lat: number; lon: number; dist: number; endereco: string }[] = [];
   const diag: string[] = [];
   const ua = { 'User-Agent': 'Faiz/1.0 (assistente pessoal; https://github.com/tiagocampelodeoliveira-oss/Faiz_web)' };
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+  async function overpass(q: string): Promise<any | null> {
+    for (const url of OVERPASS) {
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { ...ua, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(12000) });
+        if (r.ok) return await r.json();
+        diag.push(`${new URL(url).host} ${r.status}`);
+      } catch (e) { diag.push(`${new URL(url).host} ${String((e as Error).name)}`); }
+    }
+    return null;
+  }
   if (osm.length) {
     for (const radius of [2500, 8000]) {
       const sel = osm.map((t) => { const [k, v] = t.split('='); return `nwr["${k}"="${v}"](around:${radius},${lat},${lon});`; }).join('');
-      const q = `[out:json][timeout:15];(${sel});out center 40;`;
-      const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', headers: { ...ua, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) });
-      if (!r.ok) { diag.push(`overpass ${r.status} ${(await r.text().catch(() => '')).slice(0, 120)}`); break; }
-      const j = await r.json();
+      const j = await overpass(`[out:json][timeout:15];(${sel});out center 40;`);
+      if (!j) break;
       places = (j.elements || []).map((e: any) => {
         const p = { lat: e.lat ?? e.center?.lat, lon: e.lon ?? e.center?.lon };
         const t = e.tags || {};
@@ -96,11 +105,18 @@ async function nearby(body: Record<string, any>): Promise<Response> {
     }
   }
   if (!places.length && termo) {
-    const d = 0.06;
-    const u = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&accept-language=pt-BR&bounded=1&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}&q=${encodeURIComponent(termo)}`;
-    const r = await fetch(u, { headers: ua });
-    diag.push(`nominatim ${r.status}`);
-    if (r.ok) places = ((await r.json()) as any[]).map((e) => ({ nome: e.name || e.display_name.split(',')[0], lat: +e.lat, lon: +e.lon, dist: distM(here, { lat: +e.lat, lon: +e.lon }), endereco: e.display_name.split(',').slice(1, 3).join(',').trim() }));
+    // Busca por nome perto da pessoa (Photon, do OpenStreetMap).
+    try {
+      const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(termo)}&lat=${lat}&lon=${lon}&limit=15`, { headers: { ...ua, Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+      if (r.ok) {
+        const j = await r.json();
+        places = (j.features || []).map((f: any) => {
+          const [plon, plat] = f.geometry?.coordinates || [];
+          const pr = f.properties || {};
+          return { nome: pr.name || cap(termo), lat: plat, lon: plon, dist: distM(here, { lat: plat, lon: plon }), endereco: [pr.street, pr.housenumber].filter(Boolean).join(', ') };
+        }).filter((p: any) => Number.isFinite(p.lat) && p.dist <= 10000);
+      } else diag.push(`photon ${r.status}`);
+    } catch (e) { diag.push(`photon ${String((e as Error).name)}`); }
   }
   places.sort((a, b) => a.dist - b.dist);
   return json({ places: places.slice(0, 5), diag });
