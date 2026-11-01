@@ -18,10 +18,12 @@ export type NotifySettings = {
   night?: string | null; // 'HH:MM' ou null (desligado)
 };
 
+export type Sinceridade = 'na_boa' | 'sincerona' | 'sem_do';
+
 export type AppState = {
   name?: string;
   tasks?: Task[];
-  settings?: { tz?: string; notify?: NotifySettings };
+  settings?: { tz?: string; notify?: NotifySettings; sinceridade?: Sinceridade };
 };
 
 export type Notice = { key: string; title: string; body: string; url: string; tag: string };
@@ -54,6 +56,52 @@ const byTime = (a: Task, b: Task) => (a.start ?? 9999) - (b.start ?? 9999);
 /** Escolhe sempre a mesma variação de texto para a mesma tarefa (0, 1 ou 2). */
 const pick = (id: string) => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 3; };
 
+/** Dia anterior (AAAA-MM-DD) n dias antes. */
+const daysBefore = (date: string, n: number) => new Date(Date.parse(date + 'T12:00:00Z') - n * 864e5).toISOString().slice(0, 10);
+const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+/** Quantos dias seguidos (antes de hoje) a pessoa deixou de fazer uma atividade com o mesmo nome. */
+export function missedStreak(tasks: Task[], title: string, date: string): number {
+  const n = norm(title);
+  let streak = 0;
+  for (let i = 1; i <= 7; i++) {
+    const d = daysBefore(date, i);
+    const same = tasks.filter((t) => t.date === d && norm(t.title) === n);
+    if (!same.length || same.some((t) => t.status === 'feito')) break;
+    streak++;
+  }
+  return streak;
+}
+
+/** As falas da Íris nos avisos, por nível de sinceridade. Variações escolhidas por tarefa (pick). */
+const IRIS = {
+  antes: {
+    na_boa: ['Você consegue! 💜', 'Te aviso de novo na hora.', 'Respira e bora!'],
+    sincerona: ['Já vai separando o que precisa, hein!', 'Te aviso de novo na hora 😉', 'Bora, sem enrolar!'],
+    sem_do: ['Já vai se mexendo, que eu tô de olho 👀', 'Nem pensa em furar, hein.', 'Levanta daí que tá chegando a hora!'],
+  },
+  naHora: {
+    na_boa: (t: string, n: string) => [`Hora de ${n}! 💪`, `Começou: ${n} 💜`, `${t} agora! Você consegue`],
+    sincerona: (t: string, n: string) => ['E aí, vai ou não vai? 😅', `Hora de ${n}! Bora?`, `Bora? ${t} é agora 😅`],
+    sem_do: (t: string) => [`Tá de sacanagem? ${t} era agora 🙄`, `Deixa de enrolação: ${t} começou!`, `Ô, cadê você? ${t} já começou 😤`],
+  },
+  furando: {
+    na_boa: () => ' Sei que tá corrido, mas essa é importante 💜',
+    sincerona: (k: number) => ` Já é a ${k + 1}ª vez seguida, hein 👀`,
+    sem_do: (k: number) => ` ${k} dias furando. Hoje não tem desculpa!`,
+  },
+  lembrete: {
+    na_boa: 'Agora é a hora! Toque para marcar como feito.',
+    sincerona: 'Não deixa pra depois 😉 Toque para marcar como feito.',
+    sem_do: 'Agora, não amanhã. Toque para marcar como feito.',
+  },
+  insiste: {
+    na_boa: ['Passando pra lembrar de novo 💜', 'Só um lembrete carinhoso 💜', 'Ainda dá tempo 💜'],
+    sincerona: ['Ainda não deu? 👀', 'Psiu, esqueceu de mim? 🙃', 'Só passando pra cobrar de novo 🙃'],
+    sem_do: ['Vai me ignorar mesmo? 🙄', 'Ainda não fez? Sério? 😤', 'Tô esperando, viu? 😤'],
+  },
+  bomDia: { na_boa: ' Vai dar tudo certo 💜', sincerona: ' Bora?', sem_do: ' Levanta que o dia não espera!' },
+};
+
 /** Avisos devidos agora. `sent` = chaves já enviadas (para nunca repetir). */
 export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notice[] {
   const ns = state.settings?.notify ?? {};
@@ -63,6 +111,8 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   const lead = Math.max(0, Math.min(120, Number.isFinite(ns.lead as number) ? (ns.lead as number) : 10));
   const today = (state.tasks ?? []).filter((t) => t && t.date === date).sort(byTime);
   const open = today.filter((t) => t.status !== 'feito');
+  const nivel: Sinceridade = (['na_boa', 'sincerona', 'sem_do'] as const).includes(state.settings?.sinceridade as Sinceridade) ? state.settings!.sinceridade! : 'sincerona';
+  const all = state.tasks ?? [];
   const out: Notice[] = [];
   const add = (n: Notice) => { if (!sent.has(n.key)) out.push(n); };
 
@@ -78,10 +128,10 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     if (isReminder) {
       // na hora exata
       if (min >= t.start && min < t.start + 30)
-        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: ['Agora é a hora! Toque para marcar como feito ou adiar.', 'Não deixa pra depois 😉 Toque para marcar como feito.', 'Bora resolver isso agora? Toque para marcar como feito.'].at(v)!, url, tag });
+        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: IRIS.lembrete[nivel], url, tag });
       // ainda não fez? insiste uma vez
       else if (min >= t.start + 30 && min < t.start + 60)
-        add({ key: `${base}:r2`, title: ['Ainda não deu? 👀', 'Psiu, esqueceu de mim? 🙃', 'Só passando pra lembrar de novo 🙏'].at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag });
+        add({ key: `${base}:r2`, title: IRIS.insiste[nivel].at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag });
       continue;
     }
     // antes de começar
@@ -90,13 +140,14 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
       add({
         key: `${base}:${lead}`,
         title: `${t.title} em ${left} min ⏰`,
-        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${['Já vai se preparando!', 'Te aviso de novo na hora.', 'Separa o que precisa e bora!'].at(v)}`,
+        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${IRIS.antes[nivel].at(v)}`,
         url, tag,
       });
     }
     // na hora: se ainda não marcou como feito
     else if (min >= t.start && min < t.start + 20 && t.status !== 'andamento') {
-      add({ key: `${base}:s`, title: [`Hora de ${name}! 💪`, `Começou: ${name} 🚀`, `${t.title} agora! Bora?`].at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.`, url, tag });
+      const k = missedStreak(all, t.title, t.date);
+      add({ key: `${base}:s`, title: IRIS.naHora[nivel](t.title, name).at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.${k >= 2 ? IRIS.furando[nivel](k) : ''}`, url, tag });
     }
   }
 
@@ -108,8 +159,8 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const shown = items.slice(0, 4);
     const body = items.length
       ? `Hoje: ${joinPt(shown)}${items.length > 4 ? ` e mais ${items.length - 4}` : ''}.`
-      : 'Seu dia está livre. Me conte o que você precisa fazer e eu organizo.';
-    add({ key: `m:${date}`, title: `Bom dia${first ? ', ' + first : ''} ☀️`, body: items.length ? body + ' Vamos nessa?' : body, url: './', tag: 'manha' });
+      : 'Seu dia está livre. Me conta o que você precisa e eu organizo.';
+    add({ key: `m:${date}`, title: `Bom dia${first ? ', ' + first : ''}! ☀️`, body: items.length ? body + IRIS.bomDia[nivel] : body, url: './', tag: 'manha' });
   }
 
   // 3. Revisão da noite (padrão 21:00): só se houve algo no dia.
@@ -117,10 +168,13 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   if (night != null && min >= night && min < night + 60 && today.length) {
     const done = today.length - open.length;
     const pend = open.map((t) => lcFirst(t.title));
-    const body = pend.length
-      ? `Você fez ${done} de ${today.length}. Ficou pendente: ${joinPt(pend.slice(0, 3))}${pend.length > 3 ? ` e mais ${pend.length - 3}` : ''}. Toque para remarcar.`
-      : `Você fez tudo o que planejou hoje 🎉`;
-    add({ key: `n:${date}`, title: pend.length ? 'Como foi seu dia?' : 'Dia concluído', body, url: './?v=noite', tag: 'noite' });
+    const lista = `${joinPt(pend.slice(0, 3))}${pend.length > 3 ? ` e mais ${pend.length - 3}` : ''}`;
+    let title: string, body: string;
+    if (!pend.length) { title = 'Arrasou! 🎉'; body = `Você fez tudo hoje (${done} de ${today.length}). Orgulho!`; }
+    else if (nivel === 'na_boa') { title = 'Como foi seu dia? 💜'; body = `Você fez ${done} de ${today.length}. Ficou pendente: ${lista}. Quer que eu remarque?`; }
+    else if (nivel === 'sincerona') { title = 'Fechamento do dia 📋'; body = `Você fez ${done} de ${today.length}. Ficou pra trás: ${lista}. Bora remarcar?`; }
+    else { title = 'Hora da verdade 😤'; body = done ? `${done} de ${today.length}. Ficou pra trás: ${lista}. Amanhã sem desculpa, combinado?` : `Zero de ${today.length} hoje? Ficou tudo pra trás: ${lista}. Amanhã a gente recupera, sem desculpa!`; }
+    add({ key: `n:${date}`, title, body, url: './?v=noite', tag: 'noite' });
   }
   return out;
 }
