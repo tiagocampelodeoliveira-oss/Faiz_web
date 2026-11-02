@@ -26,7 +26,11 @@ export type AppState = {
   survey?: { d3?: unknown; d7?: unknown };
   tasks?: Task[];
   settings?: { tz?: string; notify?: NotifySettings };
+  /** Caderno de contas: contas fixas e quais já foram pagas (chave "id:AAAA-MM"). Valores em centavos. */
+  fin?: { fixas?: Bill[]; pagas?: Record<string, unknown> };
 };
+
+export type Bill = { id: string; tipo: 'conta' | 'renda'; nome: string; valor: number; dia: number; desde?: string; ate?: string };
 
 export type Notice = { key: string; title: string; body: string; url: string; tag: string };
 
@@ -74,6 +78,26 @@ export function missedStreak(tasks: Task[], title: string, date: string): number
   return streak;
 }
 
+/** Vezes seguidas que a pessoa cumpriu esta atividade (dias sem ela não contam; hoje ainda não feito não quebra). */
+export function doneStreak(tasks: Task[], title: string, date: string): number {
+  const n = norm(title);
+  const byDay = new Map<string, boolean>();
+  for (const t of tasks) if (t && t.date <= date && norm(t.title) === n) byDay.set(t.date, (byDay.get(t.date) ?? false) || t.status === 'feito');
+  let k = 0, last = date;
+  for (const d of [...byDay.keys()].sort().reverse()) {
+    if ((Date.parse(last) - Date.parse(d)) / 864e5 > 8) break;
+    if (byDay.get(d)) k++;
+    else if (d !== date) break;
+    last = d;
+  }
+  return k;
+}
+
+const brl = (c: number) => `R$ ${Math.floor(Math.abs(c) / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${String(Math.abs(Math.round(c)) % 100).padStart(2, '0')}`;
+const monthAdd = (m: string, n: number) => { const [y, mo] = m.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 1 + n, 1)); return d.toISOString().slice(0, 7); };
+const dueOf = (dia: number, m: string) => { const [y, mo] = m.split('-').map(Number); const last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return `${m}-${pad(Math.min(Math.max(1, Math.round(dia)), last))}`; };
+const dayDiff = (a: string, b: string) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5);
+
 /** As falas da Íris nos avisos: amiga direta que cobra com humor. Variações escolhidas por tarefa (pick). */
 const IRIS = {
   antes: ['Já vai se mexendo, que eu tô de olho 👀', 'Nem pensa em furar, hein.', 'Levanta daí que tá chegando a hora!'],
@@ -82,6 +106,7 @@ const IRIS = {
   lembrete: 'Agora, não amanhã. Toque para marcar como feito.',
   insiste: ['Vai me ignorar mesmo? 🙄', 'Ainda não fez? Sério? 😤', 'Tô esperando, viu? 😤'],
   bomDia: ' Levanta que o dia não espera!',
+  sequencia: (k: number) => ` 🔥 ${k} seguidas. Não vai quebrar agora, né?`,
 };
 
 /** Avisos devidos agora. `sent` = chaves já enviadas (para nunca repetir). */
@@ -120,7 +145,7 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
       add({
         key: `${base}:${lead}`,
         title: `${t.title} em ${left} min ⏰`,
-        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${IRIS.antes.at(v)}`,
+        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${(() => { const k = doneStreak(all, t.title, t.date); return k >= 2 ? IRIS.sequencia(k).trim() : IRIS.antes.at(v); })()}`,
         url, tag,
       });
     }
@@ -159,6 +184,22 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const dias = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(state.startDate + 'T12:00:00Z')) / 864e5);
     if (dias >= 6 && !state.survey?.d7) add({ key: 'q:d7', title: 'Fechamos a semana! 🎉', body: 'Me dá sua nota final? Leva 2 minutos e muda o Faiz de verdade.', url: './?v=pesquisa', tag: 'pesquisa' });
     else if (dias >= 2 && dias < 6 && !state.survey?.d3) add({ key: 'q:d3', title: 'Me ajuda com 1 minutinho? 🙏', body: 'Me conta como tá sendo comigo até agora. São 4 perguntas rápidas.', url: './?v=pesquisa', tag: 'pesquisa' });
+  }
+  // 5. Contas da casa (caderno): 1 a 3 dias antes, no dia e no dia seguinte se ficou atrasada. Entre 09:00 e 12:00.
+  if (min >= 9 * 60 && min < 12 * 60) {
+    const pagas = state.fin?.pagas ?? {};
+    const cur = date.slice(0, 7);
+    for (const b of state.fin?.fixas ?? []) {
+      if (!b || b.tipo !== 'conta' || !b.id || !(b.valor > 0) || !(b.dia >= 1)) continue;
+      for (const m of [monthAdd(cur, -1), cur, monthAdd(cur, 1)]) {
+        if ((b.desde && m < b.desde) || (b.ate && m > b.ate) || pagas[`${b.id}:${m}`]) continue;
+        const due = dueOf(b.dia, m), d = dayDiff(date, due);
+        const url = './?v=contas', tag = `c-${b.id}`, key = `c:${b.id}:${m}`;
+        if (d >= 1 && d <= 3) add({ key: `${key}:pre`, title: `Conta chegando: ${b.nome} 🧾`, body: `${brl(b.valor)} vence ${d === 1 ? 'amanhã' : `em ${d} dias`} (dia ${+due.slice(8)}). Já separa o dinheiro, hein!`, url, tag });
+        else if (d === 0) add({ key: `${key}:dia`, title: `Hoje vence: ${b.nome} ⚠️`, body: `${brl(b.valor)}. Pagou? Toque e marque "Paguei" pra eu parar de cobrar.`, url, tag });
+        else if (d >= -2 && d <= -1) add({ key: `${key}:atraso`, title: `${b.nome} atrasada 😤`, body: `Venceu dia ${+due.slice(8)} (${brl(b.valor)}). Paga logo, antes dos juros! Já pagou? Marca no Faiz.`, url, tag });
+      }
+    }
   }
   return out;
 }

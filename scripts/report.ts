@@ -1,5 +1,5 @@
 // Relatório do teste: números de uso e respostas da pesquisa de cada testador.
-// NÃO lê conversas nem o nome das tarefas: só contadores, aparelho e a pesquisa.
+// NÃO lê conversas, nomes de tarefas nem valores de dinheiro: só contadores, aparelho e a pesquisa.
 // Roda no GitHub Actions (workflow "Relatório do teste", botão Run workflow) e escreve o resultado em anotações.
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN!;
 const REF = process.env.SUPABASE_PROJECT_REF!;
@@ -42,6 +42,11 @@ const pessoas = states
       voz: st.voice || 0,
       lugares: st.nearby || 0,
       tarefasNaAgenda: (d.tasks || []).length,
+      // contas e rotinas: só quantidades (nunca valores nem nomes)
+      rotinas: (d.routines || []).length,
+      contasFixas: (d.fin?.fixas || []).length,
+      anotacoesDeGasto: (d.fin?.mov || []).length,
+      usouLimite: !!d.fin?.limite,
       pesquisa3: d.survey?.d3 || null,
       pesquisa7: d.survey?.d7 || null,
     };
@@ -71,6 +76,8 @@ const resumo = {
     voltaramNoDiaSeguinte: `${voltouD1} de ${base.length}`,
     usaram3DiasOuMais: `${tresDias} de ${base.length}`,
     iaFalhas: base.reduce((a, p) => a + p.iaFalhas, 0),
+    usaramContas: `${base.filter((p) => p.contasFixas + p.anotacoesDeGasto > 0).length} de ${base.length}`,
+    usaramRotinas: `${base.filter((p) => p.rotinas > 0).length} de ${base.length}`,
   },
   pesquisaDia3: {
     respostas: r3.length,
@@ -87,6 +94,7 @@ const resumo = {
     notasNps: nps,
     jeitoDaIris: contar(r7, 'iris'),
     pagariaPorMes: contar(r7, 'preco'),
+    maisQueria: contar(r7, 'queria'),
     principalBeneficio: r7.map((r) => r.beneficio).filter(Boolean),
     comoMelhorar: r7.map((r) => r.melhorar).filter(Boolean),
   },

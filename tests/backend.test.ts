@@ -216,3 +216,32 @@ test('pesquisa do teste: dia 3 e dia 7 às 19h, só se não respondeu', () => {
   assert.deepEqual(q('2026-10-30', '20:00', { d3: {}, d7: {} }), []);
   assert.deepEqual(dueNotices({ settings: { tz: SP }, tasks: [] }, at('2026-11-05', '19:00'), new Set()), [], 'sem data de início, nada');
 });
+
+test('sequência: o aviso antes comemora as vezes seguidas', () => {
+  const st = { ...base, tasks: [
+    ...base.tasks!,
+    { id: 'g1', title: 'Corrida', date: '2026-10-27', start: 1110, status: 'feito' },
+    { id: 'g2', title: 'Corrida', date: '2026-10-28', start: 1110, status: 'feito' },
+  ] };
+  const n = dueNotices(st, at('2026-10-29', '18:20'), new Set());
+  assert.match(n[0].body, /🔥 2 seguidas\. Não vai quebrar agora, né\?$/);
+});
+
+test('contas da casa: avisa antes, no dia e atrasada; paga não avisa', () => {
+  const st = { ...base, tasks: [], fin: { fixas: [
+    { id: 'luz', tipo: 'conta' as const, nome: 'Luz', valor: 18050, dia: 31, desde: '2026-10' },
+    { id: 'alu', tipo: 'conta' as const, nome: 'Aluguel', valor: 150000, dia: 29, desde: '2026-10' },
+    { id: 'net', tipo: 'conta' as const, nome: 'Internet', valor: 9990, dia: 27, desde: '2026-10' },
+    { id: 'sal', tipo: 'renda' as const, nome: 'Salário', valor: 300000, dia: 30, desde: '2026-10' },
+    { id: 'tv', tipo: 'conta' as const, nome: 'TV', valor: 5000, dia: 29, desde: '2026-10' },
+    { id: 'old', tipo: 'conta' as const, nome: 'Geladeira', valor: 30000, dia: 29, desde: '2026-08', ate: '2026-09' },
+  ], pagas: { 'tv:2026-10': { data: '2026-10-28', valor: 5000 } } } };
+  const n = dueNotices(st, at('2026-10-29', '09:30'), new Set());
+  assert.deepEqual(keys(n), ['c:luz:2026-10:pre', 'c:alu:2026-10:dia', 'c:net:2026-10:atraso']);
+  assert.equal(n[0].title, 'Conta chegando: Luz 🧾');
+  assert.match(n[0].body, /^R\$ 180,50 vence em 2 dias \(dia 31\)/);
+  assert.match(n[1].body, /^R\$ 1\.500,00\. Pagou\?/);
+  assert.equal(n[2].url, './?v=contas');
+  assert.deepEqual(dueNotices(st, at('2026-10-29', '08:59'), new Set()), [], 'só de manhã, a partir das 9h');
+  assert.deepEqual(dueNotices(st, at('2026-10-29', '10:00'), new Set(keys(n))), [], 'não repete');
+});
