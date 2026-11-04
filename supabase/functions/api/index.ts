@@ -2,7 +2,7 @@
 // Publicada com --no-verify-jwt: a pessoa é conferida aqui, pelo token, em getUser().
 import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
-import { falar } from '../_shared/tts.ts';
+import { falar, ttsLigado } from '../_shared/tts.ts';
 
 const AI_DAILY_LIMIT = 40;
 const MODEL = Deno.env.get('FAIZ_AI_MODEL') || 'claude-sonnet-5-5';
@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
   const action = String(body.action || '');
   try {
     if (action === 'config') {
-      return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY'), aiCredit: !(await aiCreditEmpty()) });
+      return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY'), tts: ttsLigado(), aiCredit: !(await aiCreditEmpty()) });
     }
     const user = await getUser(req);
     if (!user) return json({ error: 'auth' }, 401);

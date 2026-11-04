@@ -56,6 +56,8 @@ const secrets: { name: string; value: string }[] = [
   { name: 'FAIZ_TICK_SECRET', value: tick },
 ];
 if (process.env.ANTHROPIC_API_KEY) secrets.push({ name: 'FAIZ_ANTHROPIC_KEY', value: process.env.ANTHROPIC_API_KEY.trim() });
+if (process.env.AZURE_SPEECH_KEY) secrets.push({ name: 'FAIZ_AZURE_SPEECH_KEY', value: process.env.AZURE_SPEECH_KEY.trim() });
+if (process.env.AZURE_SPEECH_REGION) secrets.push({ name: 'FAIZ_AZURE_SPEECH_REGION', value: process.env.AZURE_SPEECH_REGION.trim().toLowerCase() });
 if (process.env.OWNER_WHATSAPP) secrets.push({ name: 'FAIZ_WHATSAPP', value: process.env.OWNER_WHATSAPP.replace(/\D/g, '') });
 if (!existing.has('FAIZ_VAPID_PRIVATE') || !existing.has('FAIZ_VAPID_PUBLIC')) {
   const v = await generateVapidKeys();

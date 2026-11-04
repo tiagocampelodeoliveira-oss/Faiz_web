@@ -57,6 +57,13 @@ if (token) {
   const nOk = nb.status === 200 && Array.isArray(nb.body?.places) && nb.body.places.length > 0;
   console.log(`${nOk ? '::notice::OK ' : '::warning::AVISO '} padarias perto da Av. Paulista — ${nOk ? nb.body.places.map((p: any) => `${p.nome} ${p.dist} m`).slice(0, 3).join('; ') + ' | ' + (nb.body.diag || []).join(', ') : JSON.stringify(nb.body).slice(0, 400)}`);
 
+  // 4b2. Voz da Íris (Azure). Sem chave: só avisa (o app usa a voz do celular).
+  if (cfg.body?.tts) {
+    const r = await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'tts', text: 'Oi! Eu sou a Íris.' }) });
+    const b = new Uint8Array(await r.arrayBuffer());
+    console.log(`${r.ok && b.length > 3000 ? '::notice::OK ' : '::warning::AVISO '} voz da Íris (Thalita) — ${r.status} ${r.headers.get('content-type')} ${b.length} bytes`);
+  } else console.log('::warning::VOZ DA ÍRIS desligada: falta a chave do Azure Speech (segredos AZURE_SPEECH_KEY e AZURE_SPEECH_REGION). O chat usa a voz do celular.');
+
   // 4c. Frases reais com a IA de verdade, usando a lógica publicada no site (site/index.html).
   if (AI) {
     const { readFileSync } = await import('node:fs');

@@ -187,7 +187,8 @@ button{cursor:pointer}
 .tour .bar{width:min(360px,100%);height:4px;border-radius:2px;background:rgba(255,255,255,.18);overflow:hidden}
 .tour .bar i{display:block;height:100%;width:0;background:var(--teal)}
 .tour .end{display:flex;gap:10px;width:min(360px,100%)}
-.tour .play{position:absolute;inset:0;margin:auto;width:84px;height:84px;border-radius:50%;border:0;background:rgba(255,255,255,.92);color:var(--navy);font-size:30px}
+.tour .play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border:0;border-radius:999px;padding:16px 26px;background:var(--teal);color:var(--navy);font-weight:700;font-size:18px;box-shadow:0 12px 30px -10px rgba(0,0,0,.6);white-space:nowrap}
+.tour .snd{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:16px}
 .ai-note{font-size:12.5px;color:var(--ink-muted);text-align:center;margin:6px 0 2px}
 
 /* mais / formulários */
@@ -401,7 +402,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-03 22:12';
+const APP_VERSION = '2026-11-03 22:43';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -541,7 +542,17 @@ const Cloud = (() => {
     } catch (e) {}
     return false;
   }
-  return { on, fn, push, pull, token, hasAccount: () => !!auth?.refresh };
+  /** Fala da Íris com a voz da Thalita (MP3 gerado pelo servidor). */
+  async function audio(text) {
+    const tk = await token();
+    const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 10000);
+    try {
+      const r = await fetch(`${url}/functions/v1/api`, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', apikey: anon, Authorization: 'Bearer ' + tk }, body: JSON.stringify({ action: 'tts', text }) });
+      if (!r.ok || !/audio/.test(r.headers.get('content-type') || '')) throw new Error('tts ' + r.status);
+      return await r.blob();
+    } finally { clearTimeout(tm); }
+  }
+  return { on, fn, push, pull, token, audio, hasAccount: () => !!auth?.refresh };
 })();
 
 /* ---------- Avisos no celular (Web Push) ---------- */
@@ -587,7 +598,7 @@ async function updatePushState() { U.pushState = await Push.state(); render(true
 /* Configuração pública: chave dos avisos, WhatsApp das opiniões, IA ligada. */
 (async () => {
   if (!Cloud.on) { U.aiState = 'off'; render(true); return; }
-  try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; U.aiCredit = c.aiCredit !== false; }
+  try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; U.aiCredit = c.aiCredit !== false; U.ttsOk = c.tts === true; }
   catch (e) { U.aiState = 'off'; }
   if (await Cloud.pull()) { syncRoutines(); render(); } else render(true);
   if (S.onboarded) { Cloud.push(); Push.refresh(); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; if (U.tab === 'mais') render(true); }).catch(() => {}); }
@@ -947,9 +958,34 @@ const Voice = (() => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let rec = null, heard = '';
   const clean = (t) => String(t || '').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '').replace(/\s+/g, ' ').trim();
-  function speak(text) {
-    if (!('speechSynthesis' in window)) return;
+  // Voz da Íris (Thalita). O iPhone só toca áudio "destravado" por um toque: unlock() roda no toque do microfone/enviar.
+  const player = new Audio(); player.preload = 'auto'; window.__irisAudio = player;
+  let unlocked = false, falaN = 0;
+  function unlock() {
+    if (unlocked) return;
+    unlocked = true;
+    try { player.src = 'silencio.mp3'; const p = player.play(); if (p) p.then(() => player.pause()).catch(() => { unlocked = false; }); } catch (e) { unlocked = false; }
+  }
+  function stopAll() { try { speechSynthesis?.cancel(); } catch (e) {} try { player.pause(); } catch (e) {} }
+  async function speak(text) {
     const t = clean(text); if (!t) return;
+    const n = ++falaN;
+    stopAll();
+    if (Cloud.on && U.ttsOk === true) {
+      try {
+        const blob = await Cloud.audio(t.slice(0, 700));
+        if (n !== falaN) return; // chegou outra fala depois
+        if (player.dataset.url) URL.revokeObjectURL(player.dataset.url);
+        player.dataset.url = player.src = URL.createObjectURL(blob);
+        await player.play();
+        S.stats.vozIris = (S.stats.vozIris || 0) + 1;
+        return;
+      } catch (e) { U.lastError = 'voz da Íris: ' + (e?.message || e); if (n !== falaN) return; }
+    }
+    robot(t);
+  }
+  function robot(t) {
+    if (!('speechSynthesis' in window)) return;
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(t.slice(0, 600));
@@ -961,8 +997,9 @@ const Voice = (() => {
   }
   function stop() { try { rec?.stop(); } catch (e) {} }
   function start() {
+    unlock();
     if (U.listening) { stop(); return; }
-    try { speechSynthesis?.cancel(); } catch (e) {}
+    stopAll();
     if (!SR) {
       const inp = document.getElementById('chatInput');
       inp?.focus();
@@ -992,7 +1029,7 @@ const Voice = (() => {
     try { rec.start(); U.listening = true; S.stats.voice = (S.stats.voice || 0) + 1; render(true); }
     catch (e) { U.listening = false; toast('O microfone não funcionou agora. Use o microfone do teclado.'); }
   }
-  return { start, stop, speak, supported: !!SR };
+  return { start, stop, speak, unlock, supported: !!SR };
 })();
 
 /* ---------- Lugares perto ---------- */
@@ -1045,20 +1082,23 @@ function showTour() {
   if (document.getElementById('tour')) return;
   const el = document.createElement('div');
   el.className = 'tour'; el.id = 'tour'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Como o Faiz funciona');
-  el.innerHTML = `<div class="top"><button class="skip" type="button" data-tour="close">Pular</button></div>
-    <div style="position:relative;display:flex"><video id="tourVid" src="tour.mp4" poster="tour.jpg" playsinline muted autoplay preload="auto"></video></div>
+  el.innerHTML = `<div class="top"><button class="skip" type="button" data-tour="close">Pular</button></div><div class="snd"><button class="skip" type="button" data-tour="som" aria-label="Som">🔊</button></div>
+    <div style="position:relative;display:flex"><video id="tourVid" src="tour.mp4" poster="tour.jpg" playsinline preload="auto"></video></div>
     <div class="bar"><i id="tourBar"></i></div>
     <div class="end" id="tourEnd" hidden><button class="btn white" type="button" data-tour="again" style="flex:1">Ver de novo</button><button class="btn" type="button" data-tour="close" style="flex:2;background:var(--teal);color:var(--navy)">Bora começar!</button></div>`;
   document.body.appendChild(el);
   const v = el.querySelector('video');
-  const playBtn = () => { if (el.querySelector('.play')) return; const b = document.createElement('button'); b.className = 'play'; b.type = 'button'; b.setAttribute('aria-label', 'Assistir'); b.textContent = '▶'; b.onclick = () => { b.remove(); v.play().catch(() => {}); }; v.parentElement.appendChild(b); };
-  v.play().catch(playBtn);
+  // com som, o celular só toca depois de um toque: mostra "Assistir"; se ainda assim não der, toca sem som
+  const play = () => v.play().catch(() => { v.muted = true; el.querySelector('[data-tour=som]').textContent = '🔇'; return v.play().catch(() => {}); });
+  const playBtn = () => { if (el.querySelector('.play')) return; const b = document.createElement('button'); b.className = 'play'; b.type = 'button'; b.textContent = '▶ Assistir (1 min)'; b.onclick = () => { b.remove(); play(); }; v.parentElement.appendChild(b); };
+  playBtn();
   v.addEventListener('timeupdate', () => { if (v.duration) el.querySelector('#tourBar').style.width = `${(100 * v.currentTime) / v.duration}%`; });
   v.addEventListener('ended', () => { el.querySelector('#tourEnd').hidden = false; el.querySelector('.top').hidden = true; S.stats.tourDone = (S.stats.tourDone || 0) + 1; save(); });
-  v.addEventListener('click', () => { if (v.paused) v.play().catch(() => {}); else v.pause(); });
+  v.addEventListener('click', () => { el.querySelector('.play')?.remove(); if (v.paused) play(); else v.pause(); });
   el.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tour]'); if (!b) return;
-    if (b.dataset.tour === 'again') { v.currentTime = 0; el.querySelector('#tourEnd').hidden = true; el.querySelector('.top').hidden = false; v.play().catch(playBtn); return; }
+    if (b.dataset.tour === 'som') { v.muted = !v.muted; b.textContent = v.muted ? '🔇' : '🔊'; return; }
+    if (b.dataset.tour === 'again') { v.currentTime = 0; el.querySelector('#tourEnd').hidden = true; el.querySelector('.top').hidden = false; play(); return; }
     if (!v.ended && v.currentTime < (v.duration || 99) - 1) S.stats.tourSkipped = Math.round(v.currentTime);
     v.pause(); el.remove();
     S.tourSeen = true; save(); persistLocal();
@@ -1267,7 +1307,7 @@ const screens = {
         ${['Você me fala o que precisa, do seu jeito, e eu monto o plano.', 'Você confere antes de eu mexer na agenda.', 'Eu te lembro de tudo no celular (e cobro, se precisar 😏).'].map((t) => `<div class="bul"><span>${I.check}</span><span class="muted">${t}</span></div>`).join('')}
       </div>
       <button class="btn" type="button" data-act="start">Começar</button>
-      <button class="linkbtn" type="button" data-act="tour" style="margin-top:4px">▶ Ver como funciona (50 s)</button>
+      <button class="linkbtn" type="button" data-act="tour" style="margin-top:4px">▶ Ver como funciona (1 min)</button>
       <p class="meta" style="margin-top:14px">Versão de teste: medimos o uso (sem ler suas conversas) e as respostas das pesquisas para melhorar o Faiz.</p>
     </div></main>`;
   },
@@ -1428,7 +1468,7 @@ const screens = {
       ${avisosCard()}
       <div class="label">Teste do Faiz</div>
       <div class="card">
-        <button class="setrow" type="button" data-act="tour"><div class="txt"><div class="t">Ver como o Faiz funciona</div><div class="meta">Vídeo de 50 segundos.</div></div><span class="pill">Assistir</span></button>
+        <button class="setrow" type="button" data-act="tour"><div class="txt"><div class="t">Ver como o Faiz funciona</div><div class="meta">Vídeo de 1 minuto, com a Íris explicando.</div></div><span class="pill">Assistir</span></button>
         <button class="setrow" type="button" data-act="problema"><div class="txt"><div class="t">Algo deu errado?</div><div class="meta">Me conta e eu aviso o Tiago na hora.</div></div><span class="pill">Contar</span></button>
         <button class="setrow" type="button" data-act="feedback"><div class="txt"><div class="t">Dar minha opinião</div><div class="meta">Leva 1 minuto e ajuda muito.</div></div><span class="pill navy">Abrir</span></button>
         ${U.owner
@@ -1471,7 +1511,7 @@ function render(keep) {
   if (U.tab === 'faz') {
     const inp = document.getElementById('chatInput');
     if (draft) inp.value = draft;
-    document.getElementById('chatForm').addEventListener('submit', (e) => { e.preventDefault(); const v = inp.value; inp.value = ''; send(v); });
+    document.getElementById('chatForm').addEventListener('submit', (e) => { e.preventDefault(); if (S.settings.speak) Voice.unlock(); const v = inp.value; inp.value = ''; send(v); });
     if (U.scrollChat) { U.scrollChat = false; requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight)); }
     else if (keep) window.scrollTo(0, y);
   } else if (keep) window.scrollTo(0, y);
@@ -1734,7 +1774,7 @@ document.addEventListener('click', (e) => {
     case 'pesquisa': { const q = pesquisaDevida(); if (q) surveySheet(q); break; }
     case 'askbefore': S.settings.askBefore = !S.settings.askBefore; save(); render(true); break;
     case 'mic': Voice.start(); break;
-    case 'speak': S.settings.speak = !S.settings.speak; save(); render(true); if (S.settings.speak) Voice.speak('Pronto, vou ler as respostas em voz alta.'); break;
+    case 'speak': S.settings.speak = !S.settings.speak; save(); render(true); if (S.settings.speak) Voice.unlock(); if (S.settings.speak) Voice.speak('Pronto, vou ler as respostas em voz alta.'); break;
     case 'clearchat': confirmSheet('Apagar a conversa?', 'As mensagens com o Faiz somem deste celular. Suas tarefas continuam.', 'Apagar', () => { S.chat = []; save(); render(true); toast('Conversa apagada'); }); break;
     case 'reset': confirmSheet('Apagar todos os seus dados?', 'Tarefas, conversa e seu nome serão apagados deste celular. Não dá para desfazer.', 'Apagar tudo', () => { const st = S.stats; S = fresh(); S.stats = st; save(); U.tab = 'hoje'; render(); toast('Dados apagados'); }); break;
   }

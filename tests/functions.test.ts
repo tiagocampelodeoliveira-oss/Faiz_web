@@ -242,3 +242,10 @@ test('api: Algo deu errado guarda o relato e avisa o dono', async () => {
   assert.equal(pushed.at(-1).title, 'Problema relatado por Ana 🛠️');
   assert.equal(pushed.at(-1).body, 'O microfone não abriu');
 });
+
+test('voz da Íris: limpa emoji e monta o SSML com a Thalita', async () => {
+  const { limpar, ssml, falar } = await import('../supabase/functions/_shared/tts.ts');
+  assert.equal(limpar('Bora! 💪  Agora  •  já'), 'Bora! Agora , já');
+  assert.match(ssml('Tom & Jerry <3'), /ThalitaMultilingualNeural.*Tom &amp; Jerry &lt;3/);
+  await assert.rejects(falar('oi'), /tts_off/, 'sem chave do Azure, não tenta');
+});
