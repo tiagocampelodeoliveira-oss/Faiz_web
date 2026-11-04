@@ -1,0 +1,25 @@
+name: Voz da Íris
+on:
+  push:
+    branches: [voz]
+    paths: ['narracao/falas.json', 'narracao/gerar.py']
+permissions:
+  contents: write
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: pip install -q edge-tts kokoro-onnx soundfile
+      - run: |
+          cd narracao
+          curl -sSLO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+          curl -sSLO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+      - run: python narracao/gerar.py
+      - run: |
+          rm -f narracao/*.onnx narracao/*.bin
+          git config user.name "faiz-bot"; git config user.email "faiz-bot@users.noreply.github.com"
+          git add narracao/audio && git commit -m "Narração gerada [skip ci]" && git push
