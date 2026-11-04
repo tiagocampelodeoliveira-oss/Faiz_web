@@ -32,34 +32,38 @@ const fin = L.applyFin(L.emptyFin(), [
   { type: 'mov', mov: { tipo: 'saida', valor: 98000, cat: 'mercado', desc: 'Mercado do mês', data: hoje } },
   { type: 'limite', valor: 120000 },
 ]).fin;
-const frases = [
-  'gastei 47 no ifood',
-  'paguei a luz',
-  'a internet vence todo dia 15, 99,90',
-  'comprei uma geladeira em 10x de 320',
-  'quanto eu ja gastei esse mes?',
-  'academia toda segunda quarta e sexta às 7 da manhã',
-  'quero estudar todo dia depois do trabalho',
-  'quero correr amanhã depois do trabalho',
+// Conversas: cada lista é uma conversa (a frase seguinte vê as anteriores, como no app).
+const conversas: string[][] = [
+  ['quero ir pra academia amanhã', 'montar treino da semana', '3 dias, seg qua e sex de manhã, quero ganhar massa'],
+  ['tenho prova de cálculo sexta'],
+  ['vou no mercado depois do trabalho'],
+  ['jantar com a Ana sábado às 20h'],
+  ['gastei 80 no ifood'],
+  ['to muito cansado hoje, não quero fazer nada'],
 ];
 {
   const linhas: string[] = [];
   const ctx = { now, tasks, fin };
-  for (const frase of frases) {
-    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, [], { nome: 'Tiago' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
-    const body: any = await r.json().catch(() => ({}));
-    let texto = '';
-    try {
-      const t = String(body.text || '');
-      const rep = L.aiToReply(JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)), frase, ctx);
-      const extra = [
-        rep.fin ? `[caderno: ${rep.fin.map((o: any) => o.type + (o.mov ? ` ${o.mov.tipo} ${o.mov.valor} ${o.mov.cat}` : o.fixa ? ` ${o.fixa.nome} ${o.fixa.valor} dia ${o.fixa.dia}${o.fixa.ate ? ' até ' + o.fixa.ate : ''}` : o.pago ? ` ${o.pago.valor}` : '')).join(', ')}]` : '',
-        rep.routine ? `[rotina: ${rep.routine.title} ${rep.routine.dias.join(',')} ${rep.routine.start}]` : '',
-        rep.ops ? `[agenda: ${rep.ops.length} mudança(s)]` : '',
-      ].filter(Boolean).join(' ');
-      texto = `${rep.text} ${extra}`;
-    } catch { texto = `(resposta fora do formato) ${String(body.text || JSON.stringify(body)).slice(0, 120)}`; }
-    linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
+  for (const conv of conversas) {
+    const recent: { who: 'me' | 'bot'; text: string }[] = [];
+    for (const frase of conv) {
+      const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, recent, { nome: 'Tiago' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
+      const body: any = await r.json().catch(() => ({}));
+      let texto = '';
+      try {
+        const t = String(body.text || '');
+        const rep = L.aiToReply(JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)), frase, ctx);
+        const extra = [
+          rep.routines ? `[rotinas: ${rep.routines.map((x: any) => `${x.title} ${x.dias.join(',')} ${x.start}`).join('; ')}]` : '',
+          rep.ops ? `[agenda: ${rep.ops.length}]` : '',
+          rep.fin ? `[caderno: ${rep.fin.length}]` : '',
+          rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : '',
+        ].filter(Boolean).join(' ');
+        texto = `${rep.text} ${extra}`;
+        recent.push({ who: 'me', text: frase }, { who: 'bot', text: rep.text });
+      } catch { texto = `(resposta fora do formato) ${String(body.text || JSON.stringify(body)).slice(0, 120)}`; }
+      linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
+    }
   }
   console.log(`::warning::ÍRIS: ${linhas.join(' ‖ ')}`);
 }
