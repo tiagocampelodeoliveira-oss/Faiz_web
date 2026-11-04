@@ -19,6 +19,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Voz da Íris (Node e Deno)
+        run: |
+          npx -y tsx scripts/tts-check.ts
+          deno run -A scripts/tts-check.ts
       - name: Testes do servidor
         run: npx -y tsx --test tests/backend.test.ts tests/functions.test.ts
       - name: Frases reais com a Íris (não publica nada)

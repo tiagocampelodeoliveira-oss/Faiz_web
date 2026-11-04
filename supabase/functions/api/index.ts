@@ -2,6 +2,7 @@
 // Publicada com --no-verify-jwt: a pessoa é conferida aqui, pelo token, em getUser().
 import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
+import { falar } from '../_shared/tts.ts';
 
 const AI_DAILY_LIMIT = 40;
 const MODEL = Deno.env.get('FAIZ_AI_MODEL') || 'claude-sonnet-5-5';
@@ -215,6 +216,16 @@ Deno.serve(async (req) => {
     if (action === 'nearby') return await nearby(body);
     if (action === 'owner') return await becomeOwner(user.id, body.whatsapp);
     if (action === 'report') return await report(user.id, body.text, body.ctx, body.name);
+    if (action === 'tts') {
+      // Voz da Íris no chat de voz: devolve o MP3 (o app cai na voz do celular se der erro)
+      try {
+        const mp3 = await falar(String(body.text || ''));
+        return new Response(mp3, { headers: { ...cors, 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' } });
+      } catch (e) {
+        console.error('tts', e);
+        return json({ error: 'tts', message: String((e as Error)?.message || e).slice(0, 100) }, 502);
+      }
+    }
     if (action === 'me') return json({ owner: !!(await rest(`owners?user_id=eq.${user.id}&select=user_id`))?.length, aiCredit: !(await aiCreditEmpty()) });
     return json({ error: 'unknown_action' }, 400);
   } catch (e) {
