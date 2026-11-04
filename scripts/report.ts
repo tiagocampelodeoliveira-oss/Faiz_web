@@ -33,6 +33,8 @@ const pessoas = states
       dias: st.days || [],
       pedidos: st.requests || 0,
       iaFalhas: st.aiFail || 0,
+      // motivo de cada falha (só o tipo: cortada, formato, servidor_..., rede); conta antes de 4/11 não tem motivo
+      iaFalhasPorMotivo: st.aiFailWhy || {},
       planosConfirmados: st.confirmed || 0,
       ajustados: st.adjusted || 0,
       desfeitos: st.undone || 0,
@@ -46,7 +48,7 @@ const pessoas = states
       rotinas: (d.routines || []).length,
       contasFixas: (d.fin?.fixas || []).length,
       anotacoesDeGasto: (d.fin?.mov || []).length,
-      usouLimite: !!d.fin?.limite,
+      definiuLimiteDeGastos: !!d.fin?.limite,
       pesquisa3: d.survey?.d3 || null,
       pesquisa7: d.survey?.d7 || null,
     };
@@ -76,6 +78,7 @@ const resumo = {
     voltaramNoDiaSeguinte: `${voltouD1} de ${base.length}`,
     usaram3DiasOuMais: `${tresDias} de ${base.length}`,
     iaFalhas: base.reduce((a, p) => a + p.iaFalhas, 0),
+    iaFalhasPorMotivo: base.reduce((acc: Record<string, number>, p) => { for (const [k, v] of Object.entries(p.iaFalhasPorMotivo as Record<string, number>)) acc[k] = (acc[k] || 0) + Number(v || 0); return acc; }, {}),
     usaramContas: `${base.filter((p) => p.contasFixas + p.anotacoesDeGasto > 0).length} de ${base.length}`,
     usaramRotinas: `${base.filter((p) => p.rotinas > 0).length} de ${base.length}`,
   },

@@ -402,7 +402,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-03 23:23';
+const APP_VERSION = '2026-11-04 10:28';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -735,15 +735,24 @@ async function send(text, opt = {}) {
     try {
       const recent = S.chat.slice(-7, -1).map((m) => ({ who: m.who, text: m.text }));
       const parts = L.buildPromptParts(clean, ctx, recent, { nome: (S.name || '').split(' ')[0] });
-      const { text: out } = await Cloud.fn('ai', { system: parts.system, prompt: parts.user });
-      reply = L.aiToReply(parseJson(out), clean, { now: new Date(), tasks: S.tasks, fin: S.fin });
+      let res;
+      try { res = await Cloud.fn('ai', { system: parts.system, prompt: parts.user }); }
+      catch (e) { e.why = e?.code ? 'servidor_' + e.code : !navigator.onLine ? 'sem_internet' : e?.status ? 'servidor_http' + e.status : 'rede'; throw e; }
+      let json;
+      try { json = parseJson(res.text); }
+      catch (e) { e.why = res.stop === 'max_tokens' ? 'cortada' : 'formato'; throw e; }
+      try { reply = L.aiToReply(json, clean, { now: new Date(), tasks: S.tasks, fin: S.fin }); }
+      catch (e) { e.why = 'plano_invalido'; throw e; }
       S.stats.ai++;
     } catch (e) {
       S.stats.aiFail++; failed = true;
+      // Motivo de cada falha, só o tipo (nunca o texto da conversa), para o relatório do teste.
+      const motivo = String(e?.why || 'outro').slice(0, 40);
+      S.stats.aiFailWhy = { ...(S.stats.aiFailWhy || {}), [motivo]: ((S.stats.aiFailWhy || {})[motivo] || 0) + 1 };
       reply = L.interpret(clean, { now: new Date(), tasks: S.tasks, fin: S.fin });
       if (e?.code === 'no_credit') U.aiCredit = false;
       if (e?.code === 'trial_over') U.trialOver = true;
-      const why = e?.code === 'trial_over' ? TRIAL_MSG : e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
+      const why = e?.code === 'trial_over' ? TRIAL_MSG : e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : e?.why === 'cortada' ? 'Esse pedido ficou grande demais pra mim de uma vez 😅 Respondi do jeito simples; tenta pedir em partes.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
       if (why) reply.notes = [reply.notes, why].filter(Boolean).join('\n');
     }
   } else {

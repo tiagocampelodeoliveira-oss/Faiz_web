@@ -31,7 +31,8 @@ async function ai(userId: string, prompt: unknown, system: unknown): Promise<Res
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model,
-      max_tokens: 1500,
+      // 3000: planos grandes (várias rotinas, contas e tarefas numa frase) passavam de 1500 e chegavam cortados.
+      max_tokens: 3000,
       // A parte fixa (persona, formato e regras) vai em cache: a partir do 2º pedido em 5 min, sai ~90% mais barata.
       ...(typeof system === 'string' && system.trim() ? { system: [{ type: 'text', text: system.slice(0, 20000), cache_control: { type: 'ephemeral' } }] } : {}),
       messages: [{ role: 'user', content: prompt.slice(0, 16000) }],
@@ -50,7 +51,9 @@ async function ai(userId: string, prompt: unknown, system: unknown): Promise<Res
   const out = await res.json();
   const text = (out.content || []).filter((c: { type: string }) => c.type === 'text').map((c: { text: string }) => c.text).join('');
   const u = out.usage || {};
-  return json({ text, model: out.model || '', cache: { read: u.cache_read_input_tokens || 0, write: u.cache_creation_input_tokens || 0, input: u.input_tokens || 0 } });
+  // stop = "max_tokens" quer dizer que a resposta foi cortada; o app usa isso para contar o motivo da falha.
+  if (out.stop_reason === 'max_tokens') console.error('anthropic cortada', u.output_tokens || 0);
+  return json({ text, stop: out.stop_reason || '', model: out.model || '', cache: { read: u.cache_read_input_tokens || 0, write: u.cache_creation_input_tokens || 0, input: u.input_tokens || 0 } });
 }
 
 /** Crédito da IA: marca a situação e avisa o dono do teste no celular (no máximo uma vez a cada 6 horas). */
