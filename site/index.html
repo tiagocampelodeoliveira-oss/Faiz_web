@@ -402,7 +402,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-03 22:43';
+const APP_VERSION = '2026-11-03 23:23';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -601,9 +601,12 @@ async function updatePushState() { U.pushState = await Push.state(); render(true
   try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; U.aiCredit = c.aiCredit !== false; U.ttsOk = c.tts === true; }
   catch (e) { U.aiState = 'off'; }
   if (await Cloud.pull()) { syncRoutines(); render(); } else render(true);
-  if (S.onboarded) { Cloud.push(); Push.refresh(); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; if (U.tab === 'mais') render(true); }).catch(() => {}); }
+  if (S.onboarded) { Cloud.push(); Push.refresh(); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; U.trialOver = !!m.trialOver; if (U.trialOver) render(true); if (U.tab === 'mais') render(true); }).catch(() => {}); }
   updatePushState();
 })();
+
+/* ---------- Fim do teste (7 dias): a IA pausa, o resto continua ---------- */
+const TRIAL_MSG = 'Fechamos os 7 dias de teste com a minha inteligência 💜 Agora eu respondo no modo simples, com frases diretas (tipo “corrida amanhã às 7” ou “gastei 50 no mercado”). Avisos, contas e rotinas continuam funcionando!';
 
 /* ---------- Íris: avatar e falas fixas ---------- */
 const irisImg = (mood = 'principal', size = 36) => `<img class="iris" src="iris/${mood}.webp" width="${size}" height="${size}" alt="" aria-hidden="true">`;
@@ -728,7 +731,7 @@ async function send(text, opt = {}) {
   U.typing = true; U.scrollChat = true; render(true);
   const ctx = { now: new Date(), tasks: S.tasks, fin: S.fin };
   let reply, failed = false;
-  if (Cloud.on && U.aiState !== 'off' && U.aiOn) {
+  if (Cloud.on && U.aiState !== 'off' && U.aiOn && !U.trialOver) {
     try {
       const recent = S.chat.slice(-7, -1).map((m) => ({ who: m.who, text: m.text }));
       const parts = L.buildPromptParts(clean, ctx, recent, { nome: (S.name || '').split(' ')[0] });
@@ -739,11 +742,13 @@ async function send(text, opt = {}) {
       S.stats.aiFail++; failed = true;
       reply = L.interpret(clean, { now: new Date(), tasks: S.tasks, fin: S.fin });
       if (e?.code === 'no_credit') U.aiCredit = false;
-      const why = e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
+      if (e?.code === 'trial_over') U.trialOver = true;
+      const why = e?.code === 'trial_over' ? TRIAL_MSG : e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
       if (why) reply.notes = [reply.notes, why].filter(Boolean).join('\n');
     }
   } else {
     reply = L.interpret(clean, ctx);
+    if (U.trialOver && !S.trialNoted) { reply.notes = [reply.notes, TRIAL_MSG].filter(Boolean).join('\n'); S.trialNoted = true; }
   }
   U.typing = false;
   if (opt.voice || S.settings.speak) Voice.speak(reply.text);
@@ -1320,6 +1325,7 @@ const screens = {
       <div class="row" style="justify-content:flex-end"><button class="avatar" type="button" data-act="tab" data-v="mais" aria-label="Mais opções">${esc((first || 'F').charAt(0).toUpperCase())}</button></div>
       <div class="meta" style="font-size:15px;margin-top:14px">${esc(L.longDate(d))}</div>
       <h1 class="greeting">${esc(L.greeting(new Date()))}${first ? ', ' + esc(first) : ''} 👋</h1>
+      ${U.trialOver && !S.trialSeen ? `<button class="card irisline" type="button" data-act="trialok">${irisImg('comemorando', 44)}<span><b>Fechamos os 7 dias! Valeu demais por testar 💜</b> Minha inteligência pausou por enquanto, mas avisos, contas e rotinas continuam. Toque para fechar.</span></button>` : ''}
       ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span><b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}
       ${(() => { const bs = L.billsOf(S.fin, L.monthOf(d), d).filter((b) => !b.pago && b.dias <= 3); if (!bs.length) return ''; const b = bs[0];
@@ -1378,7 +1384,7 @@ const screens = {
     };
     return `<main class="screen bg-peach" style="padding-bottom:0">
       <div class="head"><span>${irisImg('principal', 44)}</span><div style="text-align:center"><h1 class="screen-title">Íris</h1><div class="meta">sua governanta no Faiz</div></div><span></span></div>
-      ${U.aiState === 'off' ? '<p class="ai-note">Modo simples: a IA não está disponível agora, então entendo frases mais diretas.</p>' : ''}${U.pushState !== 'on' && U.pushState !== 'checking' ? `<p class="ai-note">Avisos desligados neste celular. <button class="textbtn" type="button" data-act="notify" style="font-size:12.5px;padding:0">Ativar</button></p>` : ''}
+      ${U.trialOver ? '<p class="ai-note">Seu teste de 7 dias com a IA terminou. Agora eu entendo frases mais diretas.</p>' : U.aiState === 'off' ? '<p class="ai-note">Modo simples: a IA não está disponível agora, então entendo frases mais diretas.</p>' : ''}${U.pushState !== 'on' && U.pushState !== 'checking' ? `<p class="ai-note">Avisos desligados neste celular. <button class="textbtn" type="button" data-act="notify" style="font-size:12.5px;padding:0">Ativar</button></p>` : ''}
       <div class="chat" id="chat" style="padding-top:6px">
         <div class="botrow">${irisImg('principal', 34)}<div class="msg bot">${intro}</div></div>
         ${S.chat.map(bubble).join('')}
@@ -1481,7 +1487,7 @@ const screens = {
         <div class="setrow"><div class="txt"><label class="t" for="nameEdit">Seu nome</label><input id="nameEdit" class="field" style="margin-top:6px;padding:9px 12px" maxlength="40" value="${esc(S.name)}"></div></div>
         <div class="setrow"><div class="txt"><div class="t">Ler as respostas em voz alta</div><div class="meta">${S.settings.speak ? 'Ligado: a Íris fala todas as respostas.' : 'Desligado: a Íris só fala quando você usa o microfone.'}</div></div><button class="toggle" type="button" role="switch" aria-checked="${!!S.settings.speak}" aria-label="Ler as respostas em voz alta" data-act="speak"></button></div>
         <div class="setrow"><div class="txt"><div class="t">Perguntar antes de mexer na agenda</div><div class="meta">${S.settings.askBefore ? 'Você confirma cada plano antes de entrar na agenda.' : 'O Faiz agenda direto e oferece Desfazer.'}</div></div><button class="toggle" type="button" role="switch" aria-checked="${S.settings.askBefore}" aria-label="Perguntar antes de mexer na agenda" data-act="askbefore"></button></div>
-        <div class="setrow"><div class="txt"><div class="t">Inteligência da Íris</div><div class="meta">${!U.aiCredit ? 'Sem crédito agora. A Íris responde no modo simples, com frases mais diretas.' : U.aiState === 'ready' && U.aiOn ? 'Ligada.' : U.aiState === 'loading' ? 'Verificando...' : 'Indisponível agora. A Íris entende frases mais diretas.'}</div></div></div>
+        <div class="setrow"><div class="txt"><div class="t">Inteligência da Íris</div><div class="meta">${U.trialOver ? 'Pausada: o seu teste de 7 dias terminou. A Íris responde no modo simples; avisos, contas e rotinas continuam.' : !U.aiCredit ? 'Sem crédito agora. A Íris responde no modo simples, com frases mais diretas.' : U.aiState === 'ready' && U.aiOn ? 'Ligada.' : U.aiState === 'loading' ? 'Verificando...' : 'Indisponível agora. A Íris entende frases mais diretas.'}</div></div></div>
       </div>
       <div class="label">Seus dados</div>
       <div class="card">
@@ -1758,6 +1764,7 @@ document.addEventListener('click', (e) => {
     case 'undo': undoMsg(id); break;
     case 'newtask': newTaskSheet(); break;
     case 'tour': showTour(); break;
+    case 'trialok': S.trialSeen = true; save(); render(true); break;
     case 'delroutine': { const r = S.routines.find((x) => x.id === id); if (r) confirmSheet(`Apagar a rotina "${r.title}"?`, 'As próximas vezes saem da agenda. O que você já fez continua no histórico.', 'Apagar', () => { deleteRoutine(id); render(true); toast('Rotina apagada'); }); break; }
     case 'mes': U.mes = +v === 0 ? null : L.addMonths(U.mes || L.monthOf(today()), +v); if (U.mes === L.monthOf(today())) U.mes = null; render(); break;
     case 'fin-gasto': movSheet('saida'); break;

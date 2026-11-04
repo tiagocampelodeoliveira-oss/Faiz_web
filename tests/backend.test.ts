@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { encrypt, generateVapidKeys, sendPush, unb64u, b64u, _test } from '../supabase/functions/_shared/webpush.ts';
-import { dueNotices, localNow, missedStreak, type AppState } from '../supabase/functions/_shared/plan.ts';
+import { dueNotices, localNow, missedStreak, trialInfo, type AppState } from '../supabase/functions/_shared/plan.ts';
 
 const subtle = globalThis.crypto.subtle;
 const te = new TextEncoder();
@@ -298,4 +298,11 @@ test('contas da casa: avisa antes, no dia e atrasada; paga não avisa', () => {
   assert.equal(n[2].url, './?v=contas');
   assert.deepEqual(dueNotices(st, at('2026-10-29', '08:59'), new Set()), [], 'só de manhã, a partir das 9h');
   assert.deepEqual(dueNotices(st, at('2026-10-29', '10:00'), new Set(keys(n))), [], 'não repete');
+});
+
+test('teste de 7 dias: IA pausa a partir do 8º dia (contando o dia em que começou)', () => {
+  assert.deepEqual(trialInfo('2026-11-03', at('2026-11-03', '10:00')), { dia: 0, acabou: false });
+  assert.deepEqual(trialInfo('2026-11-03', at('2026-11-09', '23:59')), { dia: 6, acabou: false }, '7º dia (pesquisa final) ainda tem IA');
+  assert.deepEqual(trialInfo('2026-11-03', at('2026-11-10', '00:01')), { dia: 7, acabou: true });
+  assert.deepEqual(trialInfo(undefined, at('2026-11-10', '10:00')), { dia: 0, acabou: false }, 'sem data de início, não bloqueia');
 });

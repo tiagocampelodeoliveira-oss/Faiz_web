@@ -273,3 +273,13 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   }
   return out;
 }
+
+/** Dias de teste com a IA por pessoa (decisão do Tiago em 3/11: 7 dias; depois a Íris fica no modo simples). */
+export const TRIAL_DAYS = 7;
+/** Dias desde o início (0 = primeiro dia) e se o teste da IA já acabou para esta pessoa. */
+export function trialInfo(startDate: string | undefined, now: Date, tz = 'America/Sao_Paulo', days = TRIAL_DAYS): { dia: number; acabou: boolean } {
+  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return { dia: 0, acabou: false };
+  const { date } = localNow(now, tz);
+  const dia = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(startDate + 'T12:00:00Z')) / 864e5);
+  return { dia, acabou: dia >= days };
+}

@@ -3,13 +3,22 @@
 import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
 import { falar, ttsLigado } from '../_shared/tts.ts';
+import { trialInfo } from '../_shared/plan.ts';
 
 const AI_DAILY_LIMIT = 40;
 const MODEL = Deno.env.get('FAIZ_AI_MODEL') || 'claude-sonnet-5-5';
 const FALLBACK_MODEL = 'claude-haiku-5-5';
 
+/** Teste de 7 dias: depois disso a IA pausa para a pessoa (o dono do teste continua). */
+async function trialOver(userId: string): Promise<boolean> {
+  if ((await rest(`owners?user_id=eq.${userId}&select=user_id`))?.length) return false;
+  const row = (await rest(`states?user_id=eq.${userId}&select=start:data->>startDate,tz:data->settings->>tz`))?.[0];
+  return trialInfo(row?.start, new Date(), row?.tz || 'America/Sao_Paulo').acabou;
+}
+
 async function ai(userId: string, prompt: unknown, system: unknown): Promise<Response> {
   if (typeof prompt !== 'string' || !prompt.trim()) return json({ error: 'bad_request' }, 400);
+  if (await trialOver(userId)) return json({ error: 'trial_over' }, 403);
   const key = Deno.env.get('FAIZ_ANTHROPIC_KEY');
   if (!key) return json({ error: 'ai_off' }, 503);
   const day = new Date().toISOString().slice(0, 10);
@@ -226,7 +235,7 @@ Deno.serve(async (req) => {
         return json({ error: 'tts', message: String((e as Error)?.message || e).slice(0, 100) }, 502);
       }
     }
-    if (action === 'me') return json({ owner: !!(await rest(`owners?user_id=eq.${user.id}&select=user_id`))?.length, aiCredit: !(await aiCreditEmpty()) });
+    if (action === 'me') return json({ owner: !!(await rest(`owners?user_id=eq.${user.id}&select=user_id`))?.length, aiCredit: !(await aiCreditEmpty()), trialOver: await trialOver(user.id) });
     return json({ error: 'unknown_action' }, 400);
   } catch (e) {
     console.error(action, e);
