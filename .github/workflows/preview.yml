@@ -22,6 +22,19 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - name: Como a ferramenta edge-tts conecta
+        run: |
+          pip install -q edge-tts
+          python - <<'PY'
+          import edge_tts, pathlib, re
+          d = pathlib.Path(edge_tts.__file__).parent
+          for f in ['constants.py', 'drm.py']:
+              t = (d / f).read_text()
+              print('::warning::FONTE ' + f + ': ' + t.replace('%', '%25').replace('\n', ' ⏎ ')[:20000])
+          c = (d / 'communicate.py').read_text()
+          i = c.find('websocket'); j = c.find('ws_connect')
+          print('::warning::FONTE communicate.py: ' + c[max(0, j - 2500): j + 1500].replace('%', '%25').replace('\n', ' ⏎ '))
+          PY
       - name: Voz da Íris (Node e Deno)
         run: |
           npx -y tsx scripts/tts-check.ts
