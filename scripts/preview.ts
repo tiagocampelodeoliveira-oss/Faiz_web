@@ -22,6 +22,7 @@ const hoje = L.dateKey(now), amanha = L.addDays(hoje, 1);
 // A pessoa furou a corrida nos últimos 3 dias e tem academia amanhã.
 const tasks = [
   ...[1, 2, 3].map((d) => ({ id: `furo${d}`, title: 'Corrida', date: L.addDays(hoje, -d), start: 1110, end: 1170, category: 'pessoal', color: 'green', status: 'pendente', createdAt: 0 })),
+  { id: 'ing1', title: 'Estudar inglês', date: L.addDays(hoje, -1), start: 1200, end: 1260, category: 'pessoal', color: 'lilac', status: 'pendente', createdAt: 0 },
   { id: 'acad1', title: 'Academia', date: amanha, start: 420, end: 480, category: 'pessoal', color: 'green', status: 'pendente', createdAt: 0 },
 ];
 // Caderno de contas: luz e aluguel fixos, salário, um mercado e limite de 1.200 no dia a dia.
@@ -40,6 +41,8 @@ const conversas: string[][] = [
   ['jantar com a Ana sábado às 20h'],
   ['gastei 80 no ifood'],
   ['to muito cansado hoje, não quero fazer nada'],
+  ['quero correr amanhã de manhã'],
+  ['vou estudar inglês hoje à noite'],
 ];
 {
   const linhas: string[] = [];

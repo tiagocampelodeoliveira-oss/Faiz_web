@@ -184,19 +184,73 @@ test('contador de furos: dias seguidos sem fazer a mesma atividade', () => {
   assert.equal(missedStreak(furos, 'Jantar', '2026-10-29'), 0);
 });
 
-test('na hora ela cobra direto; furando há dias, sobe o tom', () => {
-  const comFuros: AppState = { ...base, tasks: [...base.tasks!, ...furos] };
-  const n = dueNotices(comFuros, at('2026-10-29', '18:30'), new Set())[0];
-  assert.match(n.title, /sacanagem|enrolação|cadê/i);
-  assert.match(n.body, /3 dias furando\. Hoje não tem desculpa!/);
-  assert.doesNotMatch(dueNotices(base, at('2026-10-29', '18:30'), new Set())[0].body, /furando/);
+test('tom da Íris: animada, firme depois de furar, bronca só a partir de 3 furos seguidos', () => {
+  const na = (tasks: any[]) => dueNotices({ ...base, tasks: [...base.tasks!, ...tasks] }, at('2026-10-29', '18:30'), new Set())[0];
+  const zero = na([]);
+  assert.doesNotMatch(zero.title + zero.body, /sacanagem|enrolação|furando|furos|vezes/i);
+  const um = na(furos.slice(0, 1));
+  assert.doesNotMatch(um.title + um.body, /sacanagem|enrolação/i);
+  assert.match(um.title, /vai, né|de novo|não fura/i);
+  const dois = na(furos.slice(0, 2));
+  assert.doesNotMatch(dois.title + dois.body, /sacanagem|enrolação/i);
+  const tres = na(furos);
+  assert.match(tres.title, /sacanagem|enrolação|furos/i);
+  assert.match(tres.body, /Já são 3 vezes seguidas sem fazer\. Hoje não tem desculpa!$/);
 });
 
-test('lembrete e insistência no jeito dela', () => {
-  assert.equal(dueNotices(base, at('2026-10-29', '15:00'), new Set())[0].body, 'Agora, não amanhã. Toque para marcar como feito.');
-  assert.match(dueNotices(base, at('2026-10-29', '15:30'), new Set(['t:d:2026-10-29:900:r']))[0].title, /ignorar|Sério|esperando/);
+test('furos contam as vezes que estava na agenda (rotina seg/qua/sex)', () => {
+  const rot = ['2026-10-19', '2026-10-21', '2026-10-23', '2026-10-26', '2026-10-28'].map((date, i) => ({ id: `r${i}`, title: 'Academia', date, start: 420, status: i < 1 ? 'feito' : undefined }));
+  assert.equal(missedStreak(rot, 'Academia', '2026-10-30'), 4);
 });
 
+test('lembrete e insistência: leve sem furos, dura só com muitos furos', () => {
+  assert.match(dueNotices(base, at('2026-10-29', '15:00'), new Set())[0].body, /Toque para marcar como feito|marca aqui/);
+  const leve = dueNotices(base, at('2026-10-29', '15:30'), new Set(['t:d:2026-10-29:900:r']))[0].title;
+  assert.doesNotMatch(leve, /ignorar|Sério|De novo/);
+  const agua = [1, 2, 3].map((d) => ({ id: `ag${d}`, title: 'Beber água', date: `2026-10-${29 - d}`, start: 900, tag: 'Lembrete' }));
+  const dura = dueNotices({ ...base, tasks: [...base.tasks!, ...agua] }, at('2026-10-29', '15:30'), new Set(['t:d:2026-10-29:900:r']))[0].title;
+  assert.match(dura, /ignorar|Sério|De novo/);
+});
+
+test('1 hora antes, para atividades de 1 hora ou mais', () => {
+  const n = dueNotices(base, at('2026-10-29', '20:00'), new Set());
+  assert.ok(keys(n).includes('t:c:2026-10-29:1260:60'), keys(n).join());
+  assert.match(n.find((x) => x.key.endsWith(':60'))!.title, /1 hora|daqui a pouco/i);
+  assert.ok(!keys(dueNotices(base, at('2026-10-29', '14:00'), new Set())).some((k) => k.startsWith('t:d')), 'lembrete não tem 1 hora antes');
+});
+
+test('no fim da atividade, confere se fez', () => {
+  const n = dueNotices(base, at('2026-10-29', '19:30'), new Set());
+  assert.deepEqual(keys(n), ['t:b:2026-10-29:1110:f']);
+  assert.match(n[0].title, /✅$/);
+  const feito: AppState = { ...base, tasks: base.tasks!.map((t) => (t.id === 'b' ? { ...t, status: 'feito' } : t)) };
+  assert.ok(!keys(dueNotices(feito, at('2026-10-29', '19:30'), new Set())).includes('t:b:2026-10-29:1110:f'));
+});
+
+test('véspera às 20h: o que começa cedo amanhã; ou convite se amanhã está vazio', () => {
+  const cedo: AppState = { ...base, tasks: [...base.tasks!, { id: 'g', title: 'Academia', date: '2026-10-30', start: 420, end: 480 }] };
+  const v = dueNotices(cedo, at('2026-10-29', '20:05'), new Set()).find((n) => n.tag === 'vespera')!;
+  assert.equal(v.key, 'v:2026-10-29');
+  assert.match(v.title, /academia às 07:00/);
+  assert.ok(!dueNotices(base, at('2026-10-29', '20:05'), new Set()).some((n) => n.tag === 'vespera'), 'corrida às 18:30 não é cedo');
+  const vazio: AppState = { ...base, tasks: base.tasks!.filter((t) => t.id !== 'f') };
+  assert.deepEqual(dueNotices(vazio, at('2026-10-29', '20:10'), new Set()).filter((n) => n.tag === 'amanha').map((n) => n.key), ['a:2026-10-29']);
+});
+
+test('domingo às 19h: planejar a semana; sumiu há 2 dias: chama de volta', () => {
+  const dom = dueNotices({ ...base, tasks: base.tasks }, at('2026-11-01', '19:10'), new Set()).find((n) => n.tag === 'semana')!;
+  assert.equal(dom.key, 'w:2026-11-01');
+  assert.equal(dom.url, './?v=planejar');
+  const sumido: AppState = { ...base, stats: { days: ['2026-10-25', '2026-10-27'] } };
+  assert.deepEqual(dueNotices(sumido, at('2026-10-29', '19:00'), new Set()).filter((n) => n.tag === 'sumiu').map((n) => n.key), ['z:2026-10-29']);
+  assert.deepEqual(dueNotices({ ...sumido, stats: { days: ['2026-10-28'] } }, at('2026-10-29', '19:00'), new Set()).filter((n) => n.tag === 'sumiu'), []);
+});
+
+test('avisos novos são obrigatórios: chegam mesmo que o estado peça para desligar', () => {
+  const off: any = { ...base, settings: { tz: SP, notify: { extra: { umaHora: false, conferir: false } } } };
+  assert.ok(keys(dueNotices(off, at('2026-10-29', '20:00'), new Set())).includes('t:c:2026-10-29:1260:60'));
+  assert.ok(keys(dueNotices(off, at('2026-10-29', '19:30'), new Set())).includes('t:b:2026-10-29:1110:f'));
+});
 test('revisão da noite: cobra o que ficou; comemora quando fez tudo', () => {
   const tudo: AppState = { ...base, tasks: base.tasks!.map((t) => ({ ...t, status: 'feito' })) };
   assert.equal(dueNotices(tudo, at('2026-10-29', '21:25'), new Set())[0].title, 'Arrasou! 🎉');

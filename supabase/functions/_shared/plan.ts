@@ -26,6 +26,8 @@ export type AppState = {
   survey?: { d3?: unknown; d7?: unknown };
   tasks?: Task[];
   settings?: { tz?: string; notify?: NotifySettings };
+  /** Dias em que a pessoa abriu o Faiz (AAAA-MM-DD). */
+  stats?: { days?: string[] };
   /** Caderno de contas: contas fixas e quais já foram pagas (chave "id:AAAA-MM"). Valores em centavos. */
   fin?: { fixas?: Bill[]; pagas?: Record<string, unknown> };
 };
@@ -65,17 +67,17 @@ const pick = (id: string) => { let h = 0; for (const c of id) h = (h * 31 + c.ch
 /** Dia anterior (AAAA-MM-DD) n dias antes. */
 const daysBefore = (date: string, n: number) => new Date(Date.parse(date + 'T12:00:00Z') - n * 864e5).toISOString().slice(0, 10);
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-/** Quantos dias seguidos (antes de hoje) a pessoa deixou de fazer uma atividade com o mesmo nome. */
+/**
+ * Quantas vezes seguidas (as últimas, antes de hoje) a pessoa deixou de fazer esta atividade.
+ * Conta as vezes em que ela estava na agenda (rotina de seg/qua/sex conta 3 furos em uma semana), até 30 dias atrás.
+ */
 export function missedStreak(tasks: Task[], title: string, date: string): number {
   const n = norm(title);
-  let streak = 0;
-  for (let i = 1; i <= 7; i++) {
-    const d = daysBefore(date, i);
-    const same = tasks.filter((t) => t.date === d && norm(t.title) === n);
-    if (!same.length || same.some((t) => t.status === 'feito')) break;
-    streak++;
-  }
-  return streak;
+  const byDay = new Map<string, boolean>();
+  for (const t of tasks) if (t && t.date < date && t.date >= daysBefore(date, 30) && norm(t.title) === n) byDay.set(t.date, (byDay.get(t.date) ?? false) || t.status === 'feito');
+  let k = 0;
+  for (const d of [...byDay.keys()].sort().reverse()) { if (byDay.get(d)) break; k++; }
+  return k;
 }
 
 /** Vezes seguidas que a pessoa cumpriu esta atividade (dias sem ela não contam; hoje ainda não feito não quebra). */
@@ -98,21 +100,54 @@ const monthAdd = (m: string, n: number) => { const [y, mo] = m.split('-').map(Nu
 const dueOf = (dia: number, m: string) => { const [y, mo] = m.split('-').map(Number); const last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return `${m}-${pad(Math.min(Math.max(1, Math.round(dia)), last))}`; };
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5);
 
-/** As falas da Íris nos avisos: amiga direta que cobra com humor. Variações escolhidas por tarefa (pick). */
+/**
+ * As falas da Íris nos avisos. O tom depende de quantas vezes seguidas a pessoa furou a atividade:
+ * 0 = animada; 1 ou 2 = firme; 3 ou mais = bronca ("tá de sacanagem?"), como combinado com o Tiago em 3/11.
+ * Cada aviso tem 3 textos; a escolha é fixa por tarefa (pick), para variar sem ficar aleatório.
+ */
+const BRONCA = 3;
+const tom = (k: number) => (k >= BRONCA ? 2 : k >= 1 ? 1 : 0);
 const IRIS = {
-  antes: ['Já vai se mexendo, que eu tô de olho 👀', 'Nem pensa em furar, hein.', 'Levanta daí que tá chegando a hora!'],
-  naHora: (t: string) => [`Tá de sacanagem? ${t} era agora 🙄`, `Deixa de enrolação: ${t} começou!`, `Ô, cadê você? ${t} já começou 😤`],
-  furando: (k: number) => ` ${k} dias furando. Hoje não tem desculpa!`,
-  lembrete: 'Agora, não amanhã. Toque para marcar como feito.',
-  insiste: ['Vai me ignorar mesmo? 🙄', 'Ainda não fez? Sério? 😤', 'Tô esperando, viu? 😤'],
+  vespera: (lista: string) => [`Amanhã cedo: ${lista} 🌙`, `Lembrete de amanhã: ${lista} 🌙`, `Amanhã começa cedo: ${lista} 🌙`],
+  vesperaCorpo: ['Já deixa tudo separado hoje e dorme cedo, hein.', 'Prepara tudo hoje que amanhã é só ir.', 'Separa o que precisa agora e amanhã não tem desculpa 😉'],
+  umaHora: (t: string) => [`Daqui 1 hora: ${t} 🕐`, `Em 1 hora: ${t}. Já vai se organizando`, `${t} daqui a pouco 🕐`],
+  antes: [
+    ['Já vai se mexendo, que eu tô de olho 👀', 'Bora que tá chegando a hora!', 'Separa o que precisa e vai 💪'],
+    ['Da última vez ficou pra trás. Hoje não, hein?', 'Hoje vai, né? Tô contando com você.', 'Nem pensa em furar dessa vez.'],
+    ['Já são várias vezes furando. Hoje vai de qualquer jeito 😤', 'Hoje não aceito desculpa, viu?', 'Chega de furar: levanta e vai!'],
+  ],
+  naHora: (t: string, k: number) => [
+    [`Começou: ${t} 🚀`, `Hora de ${lcFirst(t)}! Bora 💪`, `${t} agora. Vai lá que eu tô torcendo!`],
+    [`${t} agora. Dessa vez vai, né?`, `Hora de ${lcFirst(t)}. Sem deixar pra depois de novo!`, `${t} começou. Hoje não fura, hein?`],
+    [`Tá de sacanagem? ${k} vezes furando ${lcFirst(t)} 🙄`, `Deixa de enrolação: ${lcFirst(t)} é agora 😤`, `${k} furos seguidos de ${lcFirst(t)}. Hoje vai!`],
+  ][tom(k)],
+  furando: (k: number) => ` Já são ${k} vezes seguidas sem fazer. Hoje não tem desculpa!`,
+  conferir: (t: string) => [`Terminou ${lcFirst(t)}? ✅`, `E aí, ${lcFirst(t)} foi? ✅`, `Fez ${lcFirst(t)}? ✅`],
+  conferirCorpo: ['Toque para marcar como feito e manter a sequência 🔥', 'Marca como feito pra eu não te cobrar à toa 😉', 'Toque e marque: cada vez conta 🔥'],
+  lembrete: ['Agora, não amanhã. Toque para marcar como feito.', 'É agora! Toque para marcar como feito.', 'Faz agora e marca aqui que eu paro de lembrar 😉'],
+  insiste: (k: number) => [
+    ['Ainda dá tempo! ⏳', 'Só passando pra lembrar ⏳', 'Esqueceu de mim? ⏳'],
+    ['Ainda não fez? ⏳', 'Tô esperando, viu? ⏳', 'Lembra disso aqui? ⏳'],
+    ['Vai me ignorar mesmo? 🙄', 'Sério que ainda não fez? 😤', 'De novo isso? 🙄'],
+  ][tom(k)],
   bomDia: ' Levanta que o dia não espera!',
   sequencia: (k: number) => ` 🔥 ${k} seguidas. Não vai quebrar agora, né?`,
+  amanhaVazio: ['Amanhã tá livre 🗓️', 'Nada marcado pra amanhã 🗓️', 'Amanhã em branco? 🗓️'],
+  amanhaCorpo: ['Quer planejar comigo? Me fala o que precisa fazer.', 'Me conta o que você quer fazer amanhã que eu organizo.', 'Bora deixar o dia pronto? Leva 1 minuto comigo.'],
+  semana: ['Bora planejar a semana? 📅', 'Semana nova chegando 📅', 'Domingo de planejar 📅'],
+  semanaCorpo: (n: number) => n ? `Você já tem ${n === 1 ? '1 coisa marcada' : `${n} coisas marcadas`}. Me conta o resto que eu encaixo.` : 'Sua semana tá vazia. Me conta o que vem por aí que eu organizo.',
+  sumiu: ['Sumiu, hein? 👀', 'Ei, cadê você? 👀', 'Tô com saudade 👀'],
+  sumiuCorpo: ['Abre aqui 1 minutinho que eu te ajudo a organizar o resto da semana.', 'Bora voltar? Me conta o que tem pra fazer.', 'Sem você eu não sei o que lembrar. Me conta o que vem aí!'],
 };
+
+/** Avisos novos de 3/11 (véspera, 1 hora antes, conferir no fim, amanhã vazio, semana, sumiu): sempre ligados, por decisão do Tiago. */
+type Extras = 'vespera' | 'umaHora' | 'conferir' | 'amanha' | 'semana' | 'sumiu';
 
 /** Avisos devidos agora. `sent` = chaves já enviadas (para nunca repetir). */
 export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notice[] {
   const ns = state.settings?.notify ?? {};
   if (ns.enabled === false) return [];
+  const on = (_k: Extras) => true;
   const tz = state.settings?.tz || 'America/Sao_Paulo';
   const { date, min } = localNow(now, tz);
   const lead = Math.max(0, Math.min(120, Number.isFinite(ns.lead as number) ? (ns.lead as number) : 10));
@@ -122,37 +157,58 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   const out: Notice[] = [];
   const add = (n: Notice) => { if (!sent.has(n.key)) out.push(n); };
 
-  // 1. Cada atividade com horário. Como uma governanta: avisa antes, cobra na hora e, se for lembrete, insiste.
+  // 1. Cada atividade com horário. Como uma governanta: avisa antes, cobra na hora, confere no fim; lembrete insiste.
   for (const t of open) {
     if (t.start == null) continue;
     const isReminder = t.tag === 'Lembrete';
     const v = pick(t.id);
+    const k = missedStreak(all, t.title, t.date);
     const next = open.find((o) => o.start != null && o.start > t.start! && o.id !== t.id);
     const url = `./?t=${encodeURIComponent(t.id)}`, tag = `t-${t.id}`;
     const base = `t:${t.id}:${t.date}:${t.start}`;
+    const dur = t.end != null && t.end > t.start ? t.end - t.start : 0;
     if (isReminder) {
-      // na hora exata
       if (min >= t.start && min < t.start + 30)
-        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: IRIS.lembrete, url, tag });
-      // ainda não fez? insiste uma vez
+        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: IRIS.lembrete.at(v)!, url, tag });
       else if (min >= t.start + 30 && min < t.start + 60)
-        add({ key: `${base}:r2`, title: IRIS.insiste.at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag });
+        add({ key: `${base}:r2`, title: IRIS.insiste(k).at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag });
       continue;
     }
+    // 1 hora antes (atividades de 1 hora ou mais, quando a antecedência é menor que 1 hora)
+    if (on('umaHora') && dur >= 60 && lead < 50 && min >= t.start - 60 && min < t.start - 50)
+      add({ key: `${base}:60`, title: IRIS.umaHora(t.title).at(v)!, body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''}`, url, tag });
     // antes de começar
     if (min >= t.start - lead && min < t.start) {
       const left = t.start - min;
+      const seq = doneStreak(all, t.title, t.date);
       add({
         key: `${base}:${lead}`,
         title: `${t.title} em ${left} min ⏰`,
-        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${(() => { const k = doneStreak(all, t.title, t.date); return k >= 2 ? IRIS.sequencia(k).trim() : IRIS.antes.at(v); })()}`,
+        body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${seq >= 2 ? IRIS.sequencia(seq).trim() : IRIS.antes[tom(k)].at(v)}`,
         url, tag,
       });
     }
     // na hora: se ainda não marcou como feito
     else if (min >= t.start && min < t.start + 20 && t.status !== 'andamento') {
-      const k = missedStreak(all, t.title, t.date);
-      add({ key: `${base}:s`, title: IRIS.naHora(t.title).at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.${k >= 2 ? IRIS.furando(k) : ''}`, url, tag });
+      add({ key: `${base}:s`, title: IRIS.naHora(t.title, k).at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.${k >= BRONCA ? IRIS.furando(k) : ''}`, url, tag });
+    }
+    // no fim: confere se fez (atividades de 20 min ou mais)
+    if (on('conferir') && dur >= 20 && min >= t.start + dur && min < t.start + dur + 30)
+      add({ key: `${base}:f`, title: IRIS.conferir(t.title).at(v)!, body: IRIS.conferirCorpo.at(v)!, url, tag });
+  }
+
+  // 1b. Véspera, às 20:00: o que começa cedo amanhã (antes das 10h).
+  const tomorrow = daysBefore(date, -1);
+  if (on('vespera') && min >= 20 * 60 && min < 21 * 60) {
+    const cedo = all.filter((t) => t && t.date === tomorrow && t.status !== 'feito' && t.start != null && t.start < 600 && t.tag !== 'Lembrete').sort(byTime);
+    if (cedo.length) {
+      const v = pick(tomorrow);
+      const lista = joinPt(cedo.slice(0, 3).map((t) => `${lcFirst(t.title)} às ${fmt(t.start!)}`));
+      add({ key: `v:${date}`, title: IRIS.vespera(lista).at(v)!, body: IRIS.vesperaCorpo.at(v)!, url: './', tag: 'vespera' });
+    } else if (on('amanha') && all.length && !all.some((t) => t && t.date === tomorrow)) {
+      // 1c. Amanhã sem nada planejado: convida a planejar.
+      const v = pick(date);
+      add({ key: `a:${date}`, title: IRIS.amanhaVazio.at(v)!, body: IRIS.amanhaCorpo.at(v)!, url: './', tag: 'amanha' });
     }
   }
 
@@ -184,6 +240,20 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const dias = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(state.startDate + 'T12:00:00Z')) / 864e5);
     if (dias >= 6 && !state.survey?.d7) add({ key: 'q:d7', title: 'Fechamos a semana! 🎉', body: 'Me dá sua nota final? Leva 2 minutos e muda o Faiz de verdade.', url: './?v=pesquisa', tag: 'pesquisa' });
     else if (dias >= 2 && dias < 6 && !state.survey?.d3) add({ key: 'q:d3', title: 'Me ajuda com 1 minutinho? 🙏', body: 'Me conta como tá sendo comigo até agora. São 4 perguntas rápidas.', url: './?v=pesquisa', tag: 'pesquisa' });
+  }
+  // 4b. Domingo às 19:00: planejar a semana.
+  const dow = new Date(date + 'T12:00:00Z').getUTCDay();
+  if (on('semana') && dow === 0 && min >= 19 * 60 && min < 20 * 60 && all.length) {
+    const fim = daysBefore(date, -7);
+    const n = all.filter((t) => t && t.date > date && t.date <= fim && t.status !== 'feito').length;
+    add({ key: `w:${date}`, title: IRIS.semana.at(pick(date))!, body: IRIS.semanaCorpo(n), url: './?v=planejar', tag: 'semana' });
+  }
+  // 4c. Sumiu: 2 ou 5 dias sem abrir o Faiz, às 19:00.
+  const dias = state.stats?.days ?? [];
+  if (on('sumiu') && dias.length && min >= 19 * 60 && min < 20 * 60) {
+    const ultimo = [...dias].sort().at(-1)!;
+    const sem = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(ultimo + 'T12:00:00Z')) / 864e5);
+    if (sem === 2 || sem === 5) add({ key: `z:${date}`, title: IRIS.sumiu.at(pick(date))!, body: IRIS.sumiuCorpo.at(pick(date))!, url: './', tag: 'sumiu' });
   }
   // 5. Contas da casa (caderno): 1 a 3 dias antes, no dia e no dia seguinte se ficou atrasada. Entre 09:00 e 12:00.
   if (min >= 9 * 60 && min < 12 * 60) {
