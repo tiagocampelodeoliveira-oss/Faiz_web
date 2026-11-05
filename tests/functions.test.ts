@@ -41,6 +41,8 @@ const db = {
   owners: [] as any[],
   status: [] as any[],
   reports: [] as any[],
+  unlimited: [] as any[],
+  ai_log: [] as any[],
 };
 const pushed: any[] = [];
 let pushStatus = 201;
@@ -248,4 +250,22 @@ test('voz da Íris: limpa emoji e monta o SSML com a Thalita', async () => {
   assert.equal(limpar('Bora! 💪  Agora  •  já'), 'Bora! Agora , já');
   assert.match(ssml('Tom & Jerry <3'), /ThalitaMultilingualNeural.*Tom &amp; Jerry &lt;3/);
   await assert.rejects(falar('oi'), /tts_off/, 'sem chave do Azure, não tenta');
+});
+
+test('api: liberados pelo Tiago passam do limite de 40 por dia e do teste de 7 dias; cada chamada fica registrada', async () => {
+  const auth = { Authorization: 'Bearer user-token', apikey: 'anon' };
+  const antes = { usage: db.usage, owners: db.owners, states: db.states, unlimited: db.unlimited };
+  db.owners = []; noCredit = false; sonnetDown = false;
+  db.usage = [{ n: 40 }];
+  db.states = [{ start: '2026-10-01', tz: 'America/Sao_Paulo' }] as any; // o banco de mentira devolve a linha como o select pede
+  db.unlimited = [];
+  assert.equal((await post(api, { action: 'ai', prompt: 'oi' }, auth)).status, 403, 'sem liberação: teste acabou');
+  db.unlimited = [{ user_id: U }];
+  db.ai_log = [];
+  const r = await post(api, { action: 'ai', prompt: 'oi' }, auth);
+  assert.equal(r.status, 200, 'liberado: passa do teste e do limite diário');
+  assert.equal(db.ai_log.length, 1);
+  assert.equal(db.ai_log[0].status, 200);
+  assert.ok(db.ai_log[0].ms >= 0 && !('text' in db.ai_log[0]), 'registra tempo, nunca o conteúdo');
+  Object.assign(db, antes);
 });

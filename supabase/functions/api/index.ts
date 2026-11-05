@@ -9,22 +9,29 @@ const AI_DAILY_LIMIT = 40;
 const MODEL = Deno.env.get('FAIZ_AI_MODEL') || 'claude-sonnet-5-5';
 const FALLBACK_MODEL = 'claude-haiku-5-5';
 
-/** Teste de 7 dias: depois disso a IA pausa para a pessoa (o dono do teste continua). */
+/** Dono do teste ou pessoa liberada pelo Tiago: sem limite de 7 dias nem de 40 pedidos por dia. */
+async function semLimite(userId: string): Promise<boolean> {
+  const [o, u] = await Promise.all([rest(`owners?user_id=eq.${userId}&select=user_id`), rest(`unlimited?user_id=eq.${userId}&select=user_id`)]);
+  return !!(o?.length || u?.length);
+}
+
+/** Teste de 7 dias: depois disso a IA pausa para a pessoa (dono e liberados continuam). */
 async function trialOver(userId: string): Promise<boolean> {
-  if ((await rest(`owners?user_id=eq.${userId}&select=user_id`))?.length) return false;
+  if (await semLimite(userId)) return false;
   const row = (await rest(`states?user_id=eq.${userId}&select=start:data->>startDate,tz:data->settings->>tz`))?.[0];
   return trialInfo(row?.start, new Date(), row?.tz || 'America/Sao_Paulo').acabou;
 }
 
 async function ai(userId: string, prompt: unknown, system: unknown): Promise<Response> {
   if (typeof prompt !== 'string' || !prompt.trim()) return json({ error: 'bad_request' }, 400);
-  if (await trialOver(userId)) return json({ error: 'trial_over' }, 403);
+  const livre = await semLimite(userId);
+  if (!livre && (await trialOver(userId))) return json({ error: 'trial_over' }, 403);
   const key = Deno.env.get('FAIZ_ANTHROPIC_KEY');
   if (!key) return json({ error: 'ai_off' }, 503);
   const day = new Date().toISOString().slice(0, 10);
   const rows = await rest(`usage?user_id=eq.${userId}&day=eq.${day}&select=n`);
   const n = rows?.[0]?.n ?? 0;
-  if (n >= AI_DAILY_LIMIT) return json({ error: 'limit' }, 429);
+  if (n >= AI_DAILY_LIMIT && !livre) return json({ error: 'limit' }, 429);
   await rest('usage?on_conflict=user_id,day', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ user_id: userId, day, n: n + 1 }) });
   const call = (model: string) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -38,11 +45,14 @@ async function ai(userId: string, prompt: unknown, system: unknown): Promise<Res
       messages: [{ role: 'user', content: prompt.slice(0, 16000) }],
     }),
   });
+  const t0 = Date.now();
+  let usado = MODEL;
   let res = await call(MODEL);
   // Se o modelo principal falhar (fora do ar, sobrecarregado), tenta o rápido antes de desistir.
-  if (!res.ok && res.status !== 400 && res.status !== 401) { console.error('anthropic main', res.status); res = await call(FALLBACK_MODEL); }
+  if (!res.ok && res.status !== 400 && res.status !== 401) { console.error('anthropic main', res.status); usado = FALLBACK_MODEL; res = await call(FALLBACK_MODEL); }
   if (!res.ok) {
     const t = await res.text().catch(() => '');
+    await aiLog(userId, { model: usado, status: res.status, ms: Date.now() - t0, err: t.slice(0, 200) });
     console.error('anthropic', res.status, t.slice(0, 300));
     if (/credit balance|billing|insufficient/i.test(t)) { await creditEmpty(); return json({ error: 'no_credit' }, 402); }
     return json({ error: res.status === 429 ? 'busy' : 'ai_error', status: res.status }, 502);
@@ -53,7 +63,13 @@ async function ai(userId: string, prompt: unknown, system: unknown): Promise<Res
   const u = out.usage || {};
   // stop = "max_tokens" quer dizer que a resposta foi cortada; o app usa isso para contar o motivo da falha.
   if (out.stop_reason === 'max_tokens') console.error('anthropic cortada', u.output_tokens || 0);
+  await aiLog(userId, { model: out.model || usado, status: 200, stop: out.stop_reason || '', ms: Date.now() - t0, out_tokens: u.output_tokens || 0 });
   return json({ text, stop: out.stop_reason || '', model: out.model || '', cache: { read: u.cache_read_input_tokens || 0, write: u.cache_creation_input_tokens || 0, input: u.input_tokens || 0 } });
+}
+
+/** Registro da chamada à IA (sem conteúdo), para achar falhas, cortes e lentidão. Nunca derruba o pedido. */
+async function aiLog(userId: string, v: { model: string; status: number; stop?: string; ms: number; out_tokens?: number; err?: string }): Promise<void> {
+  try { await rest('ai_log', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: userId, ...v }) }); } catch (e) { console.error('ai_log', e); }
 }
 
 /** Crédito da IA: marca a situação e avisa o dono do teste no celular (no máximo uma vez a cada 6 horas). */

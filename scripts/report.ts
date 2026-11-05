@@ -11,6 +11,8 @@ const get = async (path: string) => (await fetch(`https://${REF}.supabase.co/res
 
 const states: { user_id: string; data: any; updated_at: string }[] = await get('states?select=user_id,data,updated_at');
 const owners = new Set(((await get('owners?select=user_id')) as any[]).map((o) => o.user_id));
+const livres = new Set(((await get('unlimited?select=user_id')) as any[]).map((o) => o.user_id));
+const aiLog: any[] = await get(`ai_log?select=at,status,stop,ms,out_tokens,model&at=gte.${new Date(Date.now() - 14 * 864e5).toISOString()}&order=at.desc&limit=5000`);
 const subs = new Set(((await get('subs?select=user_id')) as any[]).map((s) => s.user_id));
 const reports: any[] = await get('reports?select=user_id,text,ctx,created_at&order=created_at.asc');
 
@@ -24,6 +26,7 @@ const pessoas = states
     return {
       nome: String(d.name || '').trim().split(/\s+/)[0] || '(sem nome)',
       dono: owners.has(s.user_id),
+      semLimite: livres.has(s.user_id),
       inicio: d.startDate || [...(st.days || [])].sort()[0] || null,
       ultimoUso: s.updated_at.slice(0, 10),
       aparelho: st.device || '?',
@@ -104,6 +107,11 @@ const resumo = {
     principalBeneficio: r7.map((r) => r.beneficio).filter(Boolean),
     comoMelhorar: r7.map((r) => r.melhorar).filter(Boolean),
   },
+  chamadasIA14dias: (() => {
+    const ok = aiLog.filter((r) => r.status === 200), ms = ok.map((r) => r.ms).sort((a, b) => a - b);
+    const q = (p: number) => (ms.length ? ms[Math.min(ms.length - 1, Math.floor(p * ms.length))] : null);
+    return { total: aiLog.length, comErro: aiLog.length - ok.length, errosPorStatus: contar(aiLog.filter((r) => r.status !== 200), 'status'), cortadas: ok.filter((r) => r.stop === 'max_tokens').length, tempoMedianoMs: q(0.5), tempo90Ms: q(0.9), modelos: contar(aiLog, 'model') };
+  })(),
   problemasRelatados: reports.map((r) => ({ quando: r.created_at.slice(0, 16), texto: r.text, aparelho: r.ctx?.aparelho, erro: r.ctx?.ultimoErro })),
   porPessoa: pessoas.map(({ dias, ...p }) => p),
 };

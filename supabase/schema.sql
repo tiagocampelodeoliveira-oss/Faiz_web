@@ -69,3 +69,27 @@ create table if not exists public.reports (
   created_at timestamptz not null default now()
 );
 alter table public.reports enable row level security;
+
+-- Pessoas liberadas sem limite (teste de 7 dias e 40 pedidos por dia), escolhidas pelo Tiago.
+-- Preenchida pelo workflow "Liberar sem limite" (scripts/liberar.ts). Só o servidor lê.
+create table if not exists public.unlimited (
+  user_id uuid primary key references auth.users on delete cascade,
+  nome text,
+  created_at timestamptz not null default now()
+);
+alter table public.unlimited enable row level security;
+
+-- Registro de cada chamada à IA (sem o conteúdo): tempo, modelo, resposta cortada, erros. Só o servidor lê.
+create table if not exists public.ai_log (
+  id bigint generated always as identity primary key,
+  user_id uuid references auth.users on delete cascade,
+  at timestamptz not null default now(),
+  model text,
+  status int,
+  stop text,
+  ms int,
+  out_tokens int,
+  err text
+);
+alter table public.ai_log enable row level security;
+create index if not exists ai_log_at on public.ai_log (at desc);
