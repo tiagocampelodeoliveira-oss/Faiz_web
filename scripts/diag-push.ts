@@ -1,7 +1,13 @@
 // Diagnóstico dos avisos (sem conteúdo): por pessoa, quais celulares estão inscritos e quantos avisos saíram.
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN!;
 const REF = process.env.SUPABASE_PROJECT_REF!;
-const keys: { name: string; type?: string; api_key: string }[] = await (await fetch(`https://api.supabase.com/v1/projects/${REF}/api-keys?reveal=true`, { headers: { Authorization: `Bearer ${TOKEN}` } })).json();
+let keys: any = null;
+for (let i = 0; i < 4 && !Array.isArray(keys); i++) {
+  const r = await fetch(`https://api.supabase.com/v1/projects/${REF}/api-keys?reveal=true`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  keys = await r.json().catch(() => null);
+  if (!Array.isArray(keys)) { console.log(`::warning::Supabase respondeu ${r.status}: ${JSON.stringify(keys).slice(0, 200)} (tentativa ${i + 1})`); await new Promise((ok) => setTimeout(ok, 5000 * (i + 1))); }
+}
+if (!Array.isArray(keys)) process.exit(1);
 const service = keys.find((k) => k.name === 'service_role' || k.type === 'secret')!.api_key;
 console.log(`::add-mask::${service}`);
 const H = { apikey: service, ...(service.startsWith('sb_') ? {} : { Authorization: `Bearer ${service}` }) };
