@@ -32,7 +32,7 @@ export type AppState = {
   fin?: { fixas?: Bill[]; pagas?: Record<string, unknown> };
 };
 
-export type Bill = { id: string; tipo: 'conta' | 'renda'; nome: string; valor: number; dia: number; desde?: string; ate?: string };
+export type Bill = { id: string; tipo: 'conta' | 'renda'; nome: string; valor: number; dia: number; desde?: string; ate?: string; freq?: 'mensal' | 'semanal' | 'anual'; mes?: number; dow?: number };
 
 export type Notice = { key: string; title: string; body: string; url: string; tag: string };
 
@@ -98,6 +98,17 @@ export function doneStreak(tasks: Task[], title: string, date: string): number {
 const brl = (c: number) => `R$ ${Math.floor(Math.abs(c) / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${String(Math.abs(Math.round(c)) % 100).padStart(2, '0')}`;
 const monthAdd = (m: string, n: number) => { const [y, mo] = m.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 1 + n, 1)); return d.toISOString().slice(0, 7); };
 const dueOf = (dia: number, m: string) => { const [y, mo] = m.split('-').map(Number); const last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return `${m}-${pad(Math.min(Math.max(1, Math.round(dia)), last))}`; };
+/** Vencimentos da conta num mês, igual ao app (src/logic/finance.ts occurrences): mensal, anual (só no mês dela) ou semanal (cada dia da semana). */
+export function billOccurrences(b: Bill, m: string): { due: string; occ: string }[] {
+  if ((b.desde && m < b.desde) || (b.ate && m > b.ate)) return [];
+  if (b.freq === 'anual') return Number(m.slice(5, 7)) === (b.mes || Number((b.desde || m).slice(5, 7))) ? [{ due: dueOf(b.dia, m), occ: m }] : [];
+  if (b.freq === 'semanal') {
+    const [y, mo] = m.split('-').map(Number), last = new Date(Date.UTC(y, mo, 0)).getUTCDate(), dow = Number.isInteger(b.dow) ? b.dow! : 1, out = [];
+    for (let d = 1; d <= last; d++) if (new Date(Date.UTC(y, mo - 1, d)).getUTCDay() === dow) { const due = `${m}-${pad(d)}`; out.push({ due, occ: due }); }
+    return out;
+  }
+  return [{ due: dueOf(b.dia, m), occ: m }];
+}
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5);
 
 /**
@@ -273,13 +284,15 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const cur = date.slice(0, 7);
     for (const b of state.fin?.fixas ?? []) {
       if (!b || b.tipo !== 'conta' || !b.id || !(b.valor > 0) || !(b.dia >= 1)) continue;
-      for (const m of [monthAdd(cur, -1), cur, monthAdd(cur, 1)]) {
-        if ((b.desde && m < b.desde) || (b.ate && m > b.ate) || pagas[`${b.id}:${m}`]) continue;
-        const due = dueOf(b.dia, m), d = dayDiff(date, due);
-        const url = './?v=contas', tag = `c-${b.id}`, key = `c:${b.id}:${m}`;
-        if (d >= 1 && d <= 3) add({ key: `${key}:pre`, title: `Conta chegando: ${b.nome} 🧾`, body: `${brl(b.valor)} vence ${d === 1 ? 'amanhã' : `em ${d} dias`} (dia ${+due.slice(8)}). Já separa o dinheiro, hein!`, url, tag });
+      const semanal = b.freq === 'semanal';
+      for (const m of [monthAdd(cur, -1), cur, monthAdd(cur, 1)]) for (const { due, occ } of billOccurrences(b, m)) {
+        if (pagas[`${b.id}:${occ}`]) continue;
+        const d = dayDiff(date, due);
+        const url = './?v=contas', tag = `c-${b.id}`, key = `c:${b.id}:${occ}`;
+        // conta semanal (diarista, feira): só avisa no dia, para não encher de aviso toda semana
+        if (!semanal && d >= 1 && d <= 3) add({ key: `${key}:pre`, title: `Conta chegando: ${b.nome} 🧾`, body: `${brl(b.valor)} vence ${d === 1 ? 'amanhã' : `em ${d} dias`} (dia ${+due.slice(8)}). Já separa o dinheiro, hein!`, url, tag });
         else if (d === 0) add({ key: `${key}:dia`, title: `Hoje vence: ${b.nome} ⚠️`, body: `${brl(b.valor)}. Pagou? Toque e marque "Paguei" pra eu parar de cobrar.`, url, tag });
-        else if (d >= -2 && d <= -1) add({ key: `${key}:atraso`, title: `${b.nome} atrasada 😤`, body: `Venceu dia ${+due.slice(8)} (${brl(b.valor)}). Paga logo, antes dos juros! Já pagou? Marca no Faiz.`, url, tag });
+        else if (!semanal && d >= -2 && d <= -1) add({ key: `${key}:atraso`, title: `${b.nome} atrasada 😤`, body: `Venceu dia ${+due.slice(8)} (${brl(b.valor)}). Paga logo, antes dos juros! Já pagou? Marca no Faiz.`, url, tag });
       }
     }
   }

@@ -318,3 +318,18 @@ test('novidade do Google: avisa 1 vez quem ainda não ligou a agenda, de dia, na
   assert.equal(nv({ news: { google: true } }, '2026-11-05', '12:00').length, 0, 'já viu no app');
   assert.equal(nv({}, '2026-11-05', '12:00', new Set(['nv:google'])).length, 0, 'já recebeu');
 });
+
+test('avisos de conta: semanal só no dia; anual só no mês dela; não repete o mês', () => {
+  const st = (fixas: any[], pagas: any = {}) => ({ name: 'Ana', settings: { tz: SP }, tasks: [], fin: { fixas, pagas } } as any);
+  const dia = { id: 'd', tipo: 'conta', nome: 'Diarista', valor: 15000, dia: 1, desde: '2026-11', freq: 'semanal', dow: 5 };
+  // 2026-11-06 é sexta
+  const sexta = dueNotices(st([dia]), at('2026-11-06', '10:00'), new Set()).filter((n) => n.tag === 'c-d');
+  assert.deepEqual(sexta.map((n) => n.key), ['c:d:2026-11-06:dia']);
+  assert.equal(dueNotices(st([dia]), at('2026-11-04', '10:00'), new Set()).filter((n) => n.tag === 'c-d').length, 0, 'semanal não avisa antes');
+  assert.equal(dueNotices(st([dia], { 'd:2026-11-06': { valor: 15000 } }), at('2026-11-06', '10:00'), new Set()).filter((n) => n.tag === 'c-d').length, 0, 'paga não avisa');
+  const ipva = { id: 'i', tipo: 'conta', nome: 'IPVA', valor: 90000, dia: 15, desde: '2026-01', freq: 'anual', mes: 3 };
+  assert.equal(dueNotices(st([ipva]), at('2026-11-13', '10:00'), new Set()).filter((n) => n.tag === 'c-i').length, 0, 'anual fora do mês');
+  assert.deepEqual(dueNotices(st([ipva]), at('2027-03-13', '10:00'), new Set()).filter((n) => n.tag === 'c-i').map((n) => n.key), ['c:i:2027-03:pre']);
+  const luz = { id: 'l', tipo: 'conta', nome: 'Luz', valor: 18000, dia: 20, desde: '2026-10' };
+  assert.deepEqual(dueNotices(st([luz]), at('2026-11-18', '10:00'), new Set()).filter((n) => n.tag === 'c-l').map((n) => n.key), ['c:l:2026-11:pre'], 'mensal continua igual');
+});

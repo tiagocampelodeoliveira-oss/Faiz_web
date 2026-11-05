@@ -33,40 +33,37 @@ const fin = L.applyFin(L.emptyFin(), [
   { type: 'mov', mov: { tipo: 'saida', valor: 98000, cat: 'mercado', desc: 'Mercado do mês', data: hoje } },
   { type: 'limite', valor: 120000 },
 ]).fin;
-// Conversas: cada lista é uma conversa (a frase seguinte vê as anteriores, como no app).
+// Conversas sobre dinheiro: cada lista é uma conversa (a frase seguinte vê as anteriores e o caderno atualizado, como no app).
 const conversas: string[][] = [
-  ['quero ir pra academia amanhã', 'montar treino da semana', '3 dias, seg qua e sex de manhã, quero ganhar massa'],
-  ['tenho prova de cálculo sexta'],
-  ['vou no mercado depois do trabalho'],
-  ['jantar com a Ana sábado às 20h'],
-  ['gastei 80 no ifood'],
-  ['to muito cansado hoje, não quero fazer nada'],
-  ['quero correr amanhã de manhã'],
-  ['vou estudar inglês hoje à noite'],
+  ['tenho 2.300 na conta', 'quanto ainda posso gastar esse mês?'],
+  ['gastei 45 no mercado e 18 no uber', 'na verdade o mercado foi 54'],
+  ['comprei um tênis de 300 no crédito', 'paguei a fatura do cartão'],
+  ['quanto gastei nesta semana?', 'e com comida?'],
+  ['paguei a luz', 'anotei errado, apaga o último gasto'],
+  ['minha academia é 110 todo dia 15', 'recebi 500 de um freela'],
+  ['dá pra gastar 400 no fim de semana?'],
+  ['gastei no mercado'],
 ];
-{
+let caderno = fin;
+for (const conv of conversas) {
   const linhas: string[] = [];
-  const ctx = { now, tasks, fin };
-  for (const conv of conversas) {
-    const recent: { who: 'me' | 'bot'; text: string }[] = [];
-    for (const frase of conv) {
-      const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, recent, { nome: 'Tiago' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
-      const body: any = await r.json().catch(() => ({}));
-      let texto = '';
-      try {
-        const t = String(body.text || '');
-        const rep = L.aiToReply(JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)), frase, ctx);
-        const extra = [
-          rep.routines ? `[rotinas: ${rep.routines.map((x: any) => `${x.title} ${x.dias.join(',')} ${x.start}`).join('; ')}]` : '',
-          rep.ops ? `[agenda: ${rep.ops.length}]` : '',
-          rep.fin ? `[caderno: ${rep.fin.length}]` : '',
-          rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : '',
-        ].filter(Boolean).join(' ');
-        texto = `${rep.text} ${extra}`;
-        recent.push({ who: 'me', text: frase }, { who: 'bot', text: rep.text });
-      } catch { texto = `(resposta fora do formato) ${String(body.text || JSON.stringify(body)).slice(0, 120)}`; }
-      linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
-    }
+  const recent: { who: 'me' | 'bot'; text: string }[] = [];
+  for (const frase of conv) {
+    const ctx = { now: new Date(), tasks, fin: caderno };
+    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, recent, { nome: 'Tiago' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
+    const body: any = await r.json().catch(() => ({}));
+    let texto = '';
+    try {
+      const t = String(body.text || '');
+      const cmd = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1));
+      const rep = L.aiToReply(cmd, frase, ctx);
+      if (rep.fin?.length) caderno = L.applyFin(caderno, rep.fin).fin;
+      const cx = L.caixa(caderno, L.dateKey(new Date()));
+      const tipos = (cmd.acao === 'varios' ? (cmd.comandos || []) : [cmd]).map((c: any) => c.financa?.tipo || c.acao).join('+');
+      texto = `[${tipos}] ${rep.text} ${rep.fin ? `[caderno: ${rep.fin.map((o: any) => o.type).join(',')}]` : ''} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} {saldo ${cx.saldo == null ? '-' : cx.saldo / 100} · comprometido ${cx.comprometido / 100} · disponível ${cx.disponivel == null ? '-' : cx.disponivel / 100}}`;
+      recent.push({ who: 'me', text: frase }, { who: 'bot', text: rep.text });
+    } catch (e) { texto = `(resposta fora do formato) ${String(body.text || JSON.stringify(body)).slice(0, 160)}`; }
+    linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
   }
   console.log(`::warning::ÍRIS: ${linhas.join(' ‖ ')}`);
 }

@@ -59,6 +59,11 @@ const pessoas = states
       contasFixas: (d.fin?.fixas || []).length,
       anotacoesDeGasto: (d.fin?.mov || []).length,
       definiuLimiteDeGastos: !!d.fin?.limite,
+      // só quantidades, nunca valores
+      informouSaldo: !!d.fin?.saldo,
+      gastosNoCredito: (d.fin?.mov ?? []).filter((x: any) => x?.forma === 'credito').length,
+      faturasPagas: (d.fin?.faturas ?? []).length,
+      contasSemanaisOuAnuais: (d.fin?.fixas ?? []).filter((x: any) => x?.freq === 'semanal' || x?.freq === 'anual').length,
       pesquisa3: d.survey?.d3 || null,
       pesquisa7: d.survey?.d7 || null,
     };
