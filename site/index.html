@@ -402,7 +402,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-05 08:52';
+const APP_VERSION = '2026-11-05 09:18';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -530,7 +530,40 @@ const Cloud = (() => {
     finally { pushing = false; if (again) { again = false; push(); } }
   }
   /** Ao abrir: pega a versão da nuvem se ela for mais nova (ex.: mudou em outra aba). */
-  async function pull() {
+  /* ---- Entrar com Google ----
+     "link": liga o Google à conta deste celular (os dados ficam). "login": entra numa conta já ligada (outro celular). */
+  const OAUTH_KEY = 'faiz:oauth';
+  const back = () => APP_URL.split('#')[0];
+  async function google(flow) {
+    try { localStorage.setItem(OAUTH_KEY, flow); } catch (e) {}
+    if (flow === 'link') {
+      const tk = await token();
+      const r = await fetch(`${url}/auth/v1/user/identities/authorize?provider=google&skip_http_redirect=true&redirect_to=${encodeURIComponent(back())}`, { headers: { apikey: anon, Authorization: 'Bearer ' + tk } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.url) throw new Error(j.msg || j.error_description || j.error || 'link ' + r.status);
+      location.href = j.url;
+    } else {
+      location.href = `${url}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(back())}`;
+    }
+  }
+  /** Volta do Google: tokens (ou erro) no fim do endereço. Devolve { flow, email } ou { flow, error } ou null. */
+  async function oauthReturn() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    const q = new URLSearchParams(location.search);
+    if (!h.get('access_token') && !h.get('error') && !q.get('error')) return null;
+    let flow = 'link'; try { flow = localStorage.getItem(OAUTH_KEY) || 'link'; localStorage.removeItem(OAUTH_KEY); } catch (e) {}
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    const err = h.get('error_description') || h.get('error') || q.get('error_description') || q.get('error');
+    if (err) return { flow, error: err, code: h.get('error_code') || q.get('error_code') || '' };
+    const access = h.get('access_token');
+    const r = await fetch(`${url}/auth/v1/user`, { headers: { apikey: anon, Authorization: 'Bearer ' + access } });
+    const u = await r.json().catch(() => ({}));
+    if (!r.ok || !u.id) return { flow, error: 'user ' + r.status };
+    const mudouDeConta = auth?.uid && auth.uid !== u.id;
+    keepAuth({ access, refresh: h.get('refresh_token'), exp: Date.now() + (+h.get('expires_in') || 3600) * 1000, uid: u.id });
+    return { flow, email: u.email || '', mudouDeConta };
+  }
+  async function pull(force) {
     if (!on || !auth?.refresh) return false;
     try {
       const tk = await token();
@@ -538,7 +571,7 @@ const Cloud = (() => {
       if (!r.ok) return false;
       const rows = await r.json();
       const remote = rows[0]?.data;
-      if (remote && (remote.updatedAt || 0) > (S.updatedAt || 0)) { S = merge(remote); persistLocal(); return true; }
+      if (remote && (force || (remote.updatedAt || 0) > (S.updatedAt || 0))) { S = merge(remote); persistLocal(); return true; }
     } catch (e) {}
     return false;
   }
@@ -552,7 +585,7 @@ const Cloud = (() => {
       return await r.blob();
     } finally { clearTimeout(tm); }
   }
-  return { on, fn, push, pull, token, audio, hasAccount: () => !!auth?.refresh };
+  return { on, fn, push, pull, token, audio, google, oauthReturn, hasAccount: () => !!auth?.refresh };
 })();
 
 /* ---------- Avisos no celular (Web Push) ---------- */
@@ -612,10 +645,39 @@ async function updatePushState() { U.pushState = await Push.state(); render(true
   if (!Cloud.on) { U.aiState = 'off'; render(true); return; }
   try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; U.aiCredit = c.aiCredit !== false; U.ttsOk = c.tts === true; }
   catch (e) { U.aiState = 'off'; }
+  const oa = await Cloud.oauthReturn().catch((e) => ({ error: String(e?.message || e) }));
+  if (oa) await googleVoltou(oa);
   if (await Cloud.pull()) { syncRoutines(); render(); } else render(true);
   if (S.onboarded) { Cloud.push(); Push.refresh().then(updatePushState); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; U.trialOver = !!m.trialOver; if (U.trialOver) render(true); if (U.tab === 'mais') render(true); }).catch(() => {}); }
   updatePushState();
 })();
+
+/* ---------- Conta Google ---------- */
+async function entrarGoogle(flow) {
+  if (!Cloud.on) return toast('Sem conexão com o servidor agora.');
+  if (flow === 'link' && S.updatedAt) { clearTimeout(saveT); persistLocal(); await Cloud.push(); }
+  try { await Cloud.google(flow); }
+  catch (e) { U.lastError = 'google: ' + (e?.message || e); toast(/manual linking|disabled/i.test(String(e?.message)) ? 'O login com Google ainda não está ligado no servidor.' : 'Não consegui abrir o Google agora. Tente de novo.'); }
+}
+async function googleVoltou(oa) {
+  if (oa.error) {
+    U.lastError = 'google: ' + oa.error;
+    if (/already|exists|linked/i.test(oa.error + oa.code)) {
+      // essa conta Google já é de outro Faiz: oferece entrar nela
+      setTimeout(() => confirmSheet('Essa conta Google já tem um Faiz', 'Quer entrar nela? Os dados guardados nessa conta vão aparecer aqui no lugar dos deste celular.', 'Entrar nela', () => entrarGoogle('login')), 300);
+    } else if (!/access_denied|cancel/i.test(oa.error)) setTimeout(() => toast('O login com Google não deu certo. Tente de novo em Mais.'), 300);
+    return;
+  }
+  if (oa.flow === 'login' || oa.mudouDeConta) {
+    // outro celular (ou depois de apagar): traz os dados da conta; se ela ainda não tem nada, fica com os deste celular
+    const veio = await Cloud.pull(true);
+    if (!veio) { S.onboarded = S.onboarded || false; }
+  }
+  S.account = { google: true, email: oa.email, em: S.account?.em || new Date().toISOString() };
+  S.stats.google = (S.stats.google || 0) + 1;
+  save();
+  setTimeout(() => toast(oa.flow === 'login' ? `Pronto! Entrei como ${oa.email} 💜` : `Conta salva com o Google (${oa.email}). Agora você não perde nada 💜`), 400);
+}
 
 /* ---------- Fim do teste (7 dias): a IA pausa, o resto continua ---------- */
 const TRIAL_MSG = 'Fechamos os 7 dias de teste com a minha inteligência 💜 Agora eu respondo no modo simples, com frases diretas (tipo “corrida amanhã às 7” ou “gastei 50 no mercado”). Avisos, contas e rotinas continuam funcionando!';
@@ -1362,6 +1424,7 @@ const screens = {
         ${['Você me fala o que precisa, do seu jeito, e eu monto o plano.', 'Você confere antes de eu mexer na agenda.', 'Eu te lembro de tudo no celular (e cobro, se precisar 😏).'].map((t) => `<div class="bul"><span>${I.check}</span><span class="muted">${t}</span></div>`).join('')}
       </div>
       <button class="btn" type="button" data-act="start">Começar</button>
+      <button class="linkbtn" type="button" data-act="google-login" style="margin-top:2px">Já usei o Faiz em outro celular? Entrar com Google</button>
       <button class="linkbtn" type="button" data-act="tour" style="margin-top:4px">▶ Ver como funciona (1 min)</button>
       <p class="meta" style="margin-top:14px">Versão de teste: medimos o uso (sem ler suas conversas) e as respostas das pesquisas para melhorar o Faiz.</p>
     </div></main>`;
@@ -1376,6 +1439,7 @@ const screens = {
       <div class="meta" style="font-size:15px;margin-top:14px">${esc(L.longDate(d))}</div>
       <h1 class="greeting">${esc(L.greeting(new Date()))}${first ? ', ' + esc(first) : ''} 👋</h1>
       ${avisosOffCard()}
+      ${!S.account?.google && S.stats.days.length >= 2 && !S.googleNudge ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Salva sua conta com o Google?</b> Assim você não perde nada se trocar de celular.</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="google-depois">Depois</button><button class="pill navy" type="button" data-act="google-link">Salvar com Google</button></div></div>` : ''}
       ${U.trialOver && !S.trialSeen ? `<button class="card irisline" type="button" data-act="trialok">${irisImg('comemorando', 44)}<span><b>Fechamos os 7 dias! Valeu demais por testar 💜</b> Minha inteligência pausou por enquanto, mas avisos, contas e rotinas continuam. Toque para fechar.</span></button>` : ''}
       ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span><b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}
@@ -1540,6 +1604,11 @@ const screens = {
         <div class="setrow"><div class="txt"><div class="t">Perguntar antes de mexer na agenda</div><div class="meta">${S.settings.askBefore ? 'Você confirma cada plano antes de entrar na agenda.' : 'O Faiz agenda direto e oferece Desfazer.'}</div></div><button class="toggle" type="button" role="switch" aria-checked="${S.settings.askBefore}" aria-label="Perguntar antes de mexer na agenda" data-act="askbefore"></button></div>
         <div class="setrow"><div class="txt"><div class="t">Inteligência da Íris</div><div class="meta">${U.trialOver ? 'Pausada: o seu teste de 7 dias terminou. A Íris responde no modo simples; avisos, contas e rotinas continuam.' : !U.aiCredit ? 'Sem crédito agora. A Íris responde no modo simples, com frases mais diretas.' : U.aiState === 'ready' && U.aiOn ? 'Ligada.' : U.aiState === 'loading' ? 'Verificando...' : 'Indisponível agora. A Íris entende frases mais diretas.'}</div></div></div>
       </div>
+      <div class="label">Sua conta</div>
+      <div class="card">${S.account?.google
+        ? `<div class="setrow"><div class="txt"><div class="t">Salva com o Google</div><div class="meta">${esc(S.account.email || '')}. Se trocar de celular, é só tocar em "Entrar com Google" lá.</div></div><span class="pill ok">✓</span></div>`
+        : `<button class="setrow" type="button" data-act="google-link"><div class="txt"><div class="t">Salvar minha conta com o Google</div><div class="meta">Para não perder suas tarefas, rotinas e contas se trocar de celular.</div></div><span class="pill navy">Salvar</span></button>
+           <button class="setrow" type="button" data-act="google-login"><div class="txt"><div class="t">Já salvei antes: entrar com Google</div><div class="meta">Traz para este celular o que você tinha no outro.</div></div><span class="pill">Entrar</span></button>`}</div>
       <div class="label">Seus dados</div>
       <div class="card">
         <button class="setrow" type="button" data-act="clearchat"><div class="txt"><div class="t">Apagar conversa com a Íris</div></div></button>
@@ -1815,6 +1884,9 @@ document.addEventListener('click', (e) => {
     case 'undo': undoMsg(id); break;
     case 'newtask': newTaskSheet(); break;
     case 'tour': showTour(); break;
+    case 'google-link': entrarGoogle('link'); break;
+    case 'google-login': entrarGoogle('login'); break;
+    case 'google-depois': S.googleNudge = true; save(); render(true); break;
     case 'trialok': S.trialSeen = true; save(); render(true); break;
     case 'delroutine': { const r = S.routines.find((x) => x.id === id); if (r) confirmSheet(`Apagar a rotina "${r.title}"?`, 'As próximas vezes saem da agenda. O que você já fez continua no histórico.', 'Apagar', () => { deleteRoutine(id); render(true); toast('Rotina apagada'); }); break; }
     case 'mes': U.mes = +v === 0 ? null : L.addMonths(U.mes || L.monthOf(today()), +v); if (U.mes === L.monthOf(today())) U.mes = null; render(); break;

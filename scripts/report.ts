@@ -28,6 +28,7 @@ const pessoas = states
       nome: String(d.name || '').trim().split(/\s+/)[0] || '(sem nome)',
       dono: owners.has(s.user_id),
       semLimite: livres.has(s.user_id),
+      contaGoogle: !!d.account?.google,
       respostaAoPedirAvisos: st.pushAsk?.resposta || null,
       reinscricoes: st.pushResub || 0,
       avisos14dias: (() => { const l = pushLog.filter((x) => x.user_id === s.user_id); return { entregues: l.filter((x) => x.ok).length, recusados: l.filter((x) => !x.ok).length, ultimo: l[0] ? `${l[0].at.slice(0, 16)} ${l[0].ok ? 'ok' : 'erro ' + l[0].status}${l[0].gone ? ' (inscrição apagada)' : ''}` : null }; })(),
@@ -90,6 +91,7 @@ const resumo = {
     iaFalhasPorMotivo: base.reduce((acc: Record<string, number>, p) => { for (const [k, v] of Object.entries(p.iaFalhasPorMotivo as Record<string, number>)) acc[k] = (acc[k] || 0) + Number(v || 0); return acc; }, {}),
     tiposDePedido: base.reduce((acc: Record<string, number>, p) => { for (const [k, v] of Object.entries(p.tiposDePedido as Record<string, number>)) acc[k] = (acc[k] || 0) + Number(v || 0); return acc; }, {}),
     usaramContas: `${base.filter((p) => p.contasFixas + p.anotacoesDeGasto > 0).length} de ${base.length}`,
+    salvaramComGoogle: `${base.filter((p) => p.contaGoogle).length} de ${base.length}`,
     usaramRotinas: `${base.filter((p) => p.rotinas > 0).length} de ${base.length}`,
   },
   pesquisaDia3: {
