@@ -402,7 +402,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-05 09:18';
+const APP_VERSION = '2026-11-05 09:21';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -1426,7 +1426,7 @@ const screens = {
       <button class="btn" type="button" data-act="start">Começar</button>
       <button class="linkbtn" type="button" data-act="google-login" style="margin-top:2px">Já usei o Faiz em outro celular? Entrar com Google</button>
       <button class="linkbtn" type="button" data-act="tour" style="margin-top:4px">▶ Ver como funciona (1 min)</button>
-      <p class="meta" style="margin-top:14px">Versão de teste: medimos o uso (sem ler suas conversas) e as respostas das pesquisas para melhorar o Faiz.</p>
+      <p class="meta" style="margin-top:14px">Versão de teste: medimos o uso (sem ler suas conversas) e as respostas das pesquisas para melhorar o Faiz. <a href="privacidade.html" style="color:inherit">Política de privacidade</a></p>
     </div></main>`;
   },
   hoje() {
@@ -1614,7 +1614,7 @@ const screens = {
         <button class="setrow" type="button" data-act="clearchat"><div class="txt"><div class="t">Apagar conversa com a Íris</div></div></button>
         <button class="setrow" type="button" data-act="reset"><div class="txt"><div class="t" style="color:var(--red-ink);font-weight:600">Apagar todos os meus dados</div><div class="meta">Tarefas, conversa e avisos deste celular.</div></div></button>
       </div>
-      <p class="meta" style="text-align:center;margin-top:22px">Faiz · versão de teste${U.cloudErr ? ' · sem conexão com a nuvem agora' : ''}</p>
+      <p class="meta" style="text-align:center;margin-top:22px"><a href="privacidade.html" style="color:inherit">Política de privacidade</a> · Faiz · versão de teste${U.cloudErr ? ' · sem conexão com a nuvem agora' : ''}</p>
     </main>`;
   },
 };
