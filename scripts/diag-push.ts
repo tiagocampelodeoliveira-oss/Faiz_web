@@ -16,3 +16,9 @@ const linhas = states.filter((s) => s.name).map((s) => {
   return `${String(s.name).split(' ')[0]} | ${s.device} | teste:${s.push || '-'} | permAsked:${s.perm} | notify:${s.notify} | inscricoes:${ss.length} ${ss.map((x) => `${new URL(x.endpoint).host} ${x.created_at.slice(0, 16)} ${/Android/.test(x.ua || '') ? 'Android' : /iPhone|Mac/.test(x.ua || '') ? 'Apple' : (x.ua || '').slice(0, 30)}`).join(' ; ')} | avisos5d:${env.length} ${JSON.stringify(tipos)} | ultimo uso:${String(s.updated_at).slice(0, 16)}`;
 });
 console.log(`::warning::DIAG PUSH: ${linhas.join(' ‖ ')}`);
+
+// Login com Google ligado?
+const anon = keys.find((k) => k.name === 'anon' || k.type === 'publishable')!.api_key;
+const conf: any = await (await fetch(`https://${REF}.supabase.co/auth/v1/settings`, { headers: { apikey: anon } })).json();
+const red = await fetch(`https://${REF}.supabase.co/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent('https://tiagocampelodeoliveira-oss.github.io/Faiz_web/')}`, { redirect: 'manual', headers: { apikey: anon } });
+console.log(`::warning::GOOGLE: provedor ${conf?.external?.google ? 'LIGADO' : 'DESLIGADO'} | anônimo ${conf?.external?.anonymous_users ?? '?'} | redireciona para ${(red.headers.get('location') || '').slice(0, 60)} (${red.status})`);
