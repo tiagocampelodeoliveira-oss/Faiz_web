@@ -298,36 +298,17 @@ test('api: Google — guarda a chave de renovação e devolve uma chave temporá
   assert.equal(cfg.google, true);
 });
 
-test('api: calendário assinado — link secreto, .ics com tarefas e contas, sem alarme; link inválido não abre', async () => {
+test('api: calendário assinado foi retirado — quem assinou recebe um calendário vazio; não cria link novo', async () => {
   const auth = { Authorization: 'Bearer user-token', apikey: 'anon' };
-  db.cal_feeds = [];
-  const r = await (await post(api, { action: 'calfeed' }, auth)).json();
-  assert.match(r.url, /^https:\/\/proj\.supabase\.co\/functions\/v1\/api\?cal=[a-f0-9]{40}$/);
-  assert.match(r.webcal, /^webcal:\/\//);
-  assert.equal(db.cal_feeds.length, 1);
-  const again = await (await post(api, { action: 'calfeed' }, auth)).json();
-  assert.equal(again.url, r.url, 'mesmo link na segunda vez');
-  const antes = db.states;
-  db.states = [{ user_id: U, data: { settings: { tz: 'America/Sao_Paulo' }, tasks: [
-    { id: 't1', title: 'Corrida, no parque', date: new Date().toISOString().slice(0, 10), start: 420, end: 465 },
-    { id: 't2', title: 'Comprar pão', date: new Date().toISOString().slice(0, 10) },
-    { id: 'g_1', title: 'Do Google', date: new Date().toISOString().slice(0, 10), start: 600, source: 'google' },
-  ], fin: { fixas: [{ id: 'l', tipo: 'conta', nome: 'Luz', valor: 18000, dia: 28, desde: '2026-01' }], pagas: {} } } }];
-  const ics = await api(new Request(r.url));
+  assert.equal((await post(api, { action: 'calfeed' }, auth)).status, 410);
+  db.cal_feeds = [{ user_id: U, token: 'a'.repeat(40) }];
+  const ics = await api(new Request('https://proj.supabase.co/functions/v1/api?cal=' + 'a'.repeat(40)));
   assert.equal(ics.status, 200);
-  assert.match(ics.headers.get('content-type')!, /text\/calendar/);
   const t = await ics.text();
   assert.match(t, /BEGIN:VCALENDAR/);
-  assert.match(t, /SUMMARY:Corrida\\, no parque/);
-  assert.match(buildIcsT({ tasks: [{ id: 'x', title: 'a;b', date: new Date().toISOString().slice(0, 10) }] }), /SUMMARY:a\\;b/);
-  assert.match(t, /DTSTART:\d{8}T070000/);
-  assert.match(t, /DTSTART;VALUE=DATE:\d{8}/);
-  assert.match(t, /Vence: Luz \(R\$ 180\\,00\)/);
-  assert.doesNotMatch(t, /Do Google/, 'o que veio do Google não volta duplicado');
-  assert.doesNotMatch(t, /VALARM/, 'sem alarme: quem avisa é o Faiz');
-  assert.ok(t.split('\r\n').every((l) => new TextEncoder().encode(l).length <= 75));
-  db.states = antes;
+  assert.doesNotMatch(t, /BEGIN:VEVENT/, 'sem nenhuma tarefa');
   assert.equal((await api(new Request('https://proj.supabase.co/functions/v1/api?cal=../states'))).status, 404);
   assert.equal((await post(api, { action: 'calstop' }, auth)).status, 200);
   assert.equal(db.cal_feeds.length, 0);
+  assert.match(buildIcsT({ tasks: [{ id: 'x', title: 'a;b', date: new Date().toISOString().slice(0, 10) }] }), /SUMMARY:a\\;b/);
 });

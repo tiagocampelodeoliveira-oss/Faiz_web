@@ -264,7 +264,8 @@ Deno.serve(async (req) => {
       const data = st?.data || {};
       const { date } = localNow(new Date(), data.settings?.tz || 'America/Sao_Paulo');
       rest(`cal_feeds?user_id=eq.${f.user_id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_fetch: new Date().toISOString() }) }).catch(() => {});
-      return new Response(buildIcs(data, date), { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Disposition': 'inline; filename="faiz.ics"' } });
+      // desde 5/11 o Faiz não manda mais nada para o calendário (decisão do Tiago): quem assinou recebe o calendário vazio
+      return new Response(buildIcs({}, date), { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Disposition': 'inline; filename="faiz.ics"' } });
     } catch (e) { console.error('cal', e); return new Response('erro', { status: 500 }); }
   }
   if (req.method !== 'POST') return json({ error: 'method' }, 405);
@@ -285,6 +286,7 @@ Deno.serve(async (req) => {
     if (action === 'report') return await report(user.id, body.text, body.ctx, body.name);
     if (action === 'calfeed') {
       // link secreto do calendário (cria na primeira vez); "novo": troca o link (o antigo para de funcionar)
+      return json({ error: 'removido' }, 410); // o Faiz não manda mais nada para o calendário do celular
       if (body.novo) await rest(`cal_feeds?user_id=eq.${user.id}`, { method: 'DELETE' });
       let [f] = await rest(`cal_feeds?user_id=eq.${user.id}&select=token`);
       if (!f) {

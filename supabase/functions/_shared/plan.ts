@@ -159,7 +159,7 @@ type Extras = 'vespera' | 'umaHora' | 'conferir' | 'amanha' | 'semana' | 'sumiu'
 export const NOVIDADE = {
   id: 'google', de: '2026-11-05', ate: '2026-11-12',
   title: 'Novidade: o Faiz agora conversa com o seu Google 🎉',
-  body: 'Usa Google Agenda? Eu trago seus compromissos pra cá e levo o que você marcar comigo. Toque pra ligar em 1 minuto.',
+  body: 'Usa Google Agenda? Eu trago seus compromissos de lá pra cá e monto seu dia sem bater horário. Toque pra ligar em 1 minuto.',
 };
 
 export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notice[] {

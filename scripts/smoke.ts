@@ -65,12 +65,9 @@ if (token) {
     console.log(`${cfg.body?.google === true && b?.error === 'google_none' ? '::notice::OK ' : '::warning::AVISO '} integrações com o Google — config.google=${cfg.body?.google} gtoken=${r.status} ${b?.error || ''}`);
   }
   {
-    // calendário assinado: cria o link e o Calendário consegue ler o .ics sem login
+    // calendário assinado foi retirado em 5/11: não cria link novo
     const r = await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'calfeed' }) });
-    const b = await r.json().catch(() => ({}));
-    const g = b?.url ? await fetch(b.url) : null;
-    const t = g ? await g.text() : '';
-    console.log(`${g?.ok && /BEGIN:VCALENDAR/.test(t) && /text\/calendar/.test(g.headers.get('content-type') || '') ? '::notice::OK ' : '::warning::AVISO '} calendário do celular — ${r.status} ${g?.status} ${g?.headers.get('content-type')} ${t.length} bytes`);
+    console.log(`${r.status === 410 ? '::notice::OK ' : '::warning::AVISO '} calendário do celular retirado — ${r.status}`);
     await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'calstop' }) });
   }
   if (cfg.body?.tts) {
