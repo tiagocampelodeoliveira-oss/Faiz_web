@@ -44,6 +44,7 @@ const db = {
   unlimited: [] as any[],
   ai_log: [] as any[],
   push_log: [] as any[],
+  google_tokens: [] as any[],
 };
 const pushed: any[] = [];
 let pushStatus = 201;
@@ -63,6 +64,11 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
     if (noCredit) return new Response('{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}', { status: 400 });
     if (sonnetDown && anthropicBody.model === 'claude-sonnet-5-5') return new Response('{"error":"overloaded"}', { status: 529 });
     return Response.json({ content: [{ type: 'text', text: '{"acao":"conversa","resposta":"Oi"}' }] });
+  }
+  if (url.host === 'oauth2.googleapis.com') {
+    const b = new URLSearchParams(String(init.body));
+    if (b.get('refresh_token') === 'revogado') return Response.json({ error: 'invalid_grant' }, { status: 400 });
+    return Response.json({ access_token: 'ya29.temp', expires_in: 3599, scope: 'https://www.googleapis.com/auth/calendar.events' });
   }
   if (url.host === 'photon.komoot.io') { photonUrl = String(input); return Response.json({ features: photonFeatures }); }
   if (url.host === 'overpass-api.de') {
@@ -272,4 +278,19 @@ test('api: liberados pelo Tiago passam do limite de 40 por dia e do teste de 7 d
   assert.equal(db.ai_log[0].status, 200);
   assert.ok(db.ai_log[0].ms >= 0 && !('text' in db.ai_log[0]), 'registra tempo, nunca o conteúdo');
   Object.assign(db, antes);
+});
+
+test('api: Google — guarda a chave de renovação e devolve uma chave temporária; permissão tirada apaga', async () => {
+  const auth = { Authorization: 'Bearer user-token', apikey: 'anon' };
+  env.FAIZ_GOOGLE_ID = 'id.apps.googleusercontent.com'; env.FAIZ_GOOGLE_SECRET = 'segredo';
+  db.google_tokens = [];
+  assert.equal((await post(api, { action: 'gsave', refresh_token: '1//abcdefghijk', scopes: 'calendar.events' }, auth)).status, 200);
+  assert.equal(db.google_tokens.length, 1);
+  db.google_tokens = [{ refresh_token: '1//abcdefghijk', scopes: 'calendar.events' }];
+  const t = await (await post(api, { action: 'gtoken' }, auth)).json();
+  assert.equal(t.access_token, 'ya29.temp');
+  db.google_tokens = [{ refresh_token: 'revogado' }];
+  assert.equal((await post(api, { action: 'gtoken' }, auth)).status, 401);
+  const cfg = await (await post(api, { action: 'config' })).json();
+  assert.equal(cfg.google, true);
 });

@@ -67,6 +67,29 @@ async function ai(userId: string, prompt: unknown, system: unknown): Promise<Res
   return json({ text, stop: out.stop_reason || '', model: out.model || '', cache: { read: u.cache_read_input_tokens || 0, write: u.cache_creation_input_tokens || 0, input: u.input_tokens || 0 } });
 }
 
+/** Google (Agenda, Contatos, Gmail): guarda a chave de renovação e devolve chaves temporárias ao app.
+    O conteúdo (eventos, contatos, e-mails) vai direto do Google para o celular; o servidor nunca vê. */
+const GOOGLE_ID = () => Deno.env.get('FAIZ_GOOGLE_ID') || '';
+const GOOGLE_SECRET = () => Deno.env.get('FAIZ_GOOGLE_SECRET') || '';
+async function googleSave(userId: string, refresh: unknown, scopes: unknown): Promise<Response> {
+  if (typeof refresh !== 'string' || refresh.length < 10) return json({ error: 'bad_request' }, 400);
+  await rest('google_tokens?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: userId, refresh_token: refresh, scopes: String(scopes || '').slice(0, 500), updated_at: new Date().toISOString() }) });
+  return json({ ok: true });
+}
+async function googleToken(userId: string): Promise<Response> {
+  if (!GOOGLE_ID() || !GOOGLE_SECRET()) return json({ error: 'google_off' }, 503);
+  const row = (await rest(`google_tokens?user_id=eq.${userId}&select=refresh_token,scopes`))?.[0];
+  if (!row) return json({ error: 'google_none' }, 404);
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: GOOGLE_ID(), client_secret: GOOGLE_SECRET(), refresh_token: row.refresh_token, grant_type: 'refresh_token' }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    // a pessoa tirou a permissão no Google: apaga e o app pede para ligar de novo
+    if (j.error === 'invalid_grant') { await rest(`google_tokens?user_id=eq.${userId}`, { method: 'DELETE' }); return json({ error: 'google_revoked' }, 401); }
+    return json({ error: 'google_error', status: r.status }, 502);
+  }
+  return json({ access_token: j.access_token, expires_in: j.expires_in || 3600, scopes: j.scope || row.scopes || '' });
+}
+
 /** Registro da chamada à IA (sem conteúdo), para achar falhas, cortes e lentidão. Nunca derruba o pedido. */
 async function aiLog(userId: string, v: { model: string; status: number; stop?: string; ms: number; out_tokens?: number; err?: string }): Promise<void> {
   try { await rest('ai_log', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: userId, ...v }) }); } catch (e) { console.error('ai_log', e); }
@@ -235,7 +258,7 @@ Deno.serve(async (req) => {
   const action = String(body.action || '');
   try {
     if (action === 'config') {
-      return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY'), tts: ttsLigado(), aiCredit: !(await aiCreditEmpty()) });
+      return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY'), tts: ttsLigado(), google: !!(GOOGLE_ID() && GOOGLE_SECRET()), aiCredit: !(await aiCreditEmpty()) });
     }
     const user = await getUser(req);
     if (!user) return json({ error: 'auth' }, 401);
@@ -245,6 +268,9 @@ Deno.serve(async (req) => {
     if (action === 'nearby') return await nearby(body);
     if (action === 'owner') return await becomeOwner(user.id, body.whatsapp);
     if (action === 'report') return await report(user.id, body.text, body.ctx, body.name);
+    if (action === 'gsave') return await googleSave(user.id, body.refresh_token, body.scopes);
+    if (action === 'gtoken') return await googleToken(user.id);
+    if (action === 'gforget') { await rest(`google_tokens?user_id=eq.${user.id}`, { method: 'DELETE' }); return json({ ok: true }); }
     if (action === 'tts') {
       // Voz da Íris no chat de voz: devolve o MP3 (o app cai na voz do celular se der erro)
       try {

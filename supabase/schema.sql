@@ -110,3 +110,13 @@ create table if not exists public.push_log (
 );
 alter table public.push_log enable row level security;
 create index if not exists push_log_at on public.push_log (at desc);
+
+-- Integrações com o Google (Agenda, Contatos, Gmail): a chave de renovação do Google de cada pessoa.
+-- Só o servidor lê; o app recebe, quando pede, uma chave temporária (1 hora) para falar direto com o Google.
+create table if not exists public.google_tokens (
+  user_id uuid primary key references auth.users on delete cascade,
+  refresh_token text not null,
+  scopes text,
+  updated_at timestamptz not null default now()
+);
+alter table public.google_tokens enable row level security;
