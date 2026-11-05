@@ -93,3 +93,6 @@ create table if not exists public.ai_log (
 );
 alter table public.ai_log enable row level security;
 create index if not exists ai_log_at on public.ai_log (at desc);
+-- o registro fica mesmo se a pessoa (ou o usuário do teste automático) for apagada
+alter table public.ai_log drop constraint if exists ai_log_user_id_fkey;
+alter table public.ai_log add constraint ai_log_user_id_fkey foreign key (user_id) references auth.users on delete set null;
