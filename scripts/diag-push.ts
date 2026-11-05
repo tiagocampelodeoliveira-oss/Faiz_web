@@ -17,6 +17,17 @@ const linhas = states.filter((s) => s.name).map((s) => {
 });
 console.log(`::warning::DIAG PUSH: ${linhas.join(' ‖ ')}`);
 
+// Novidade do Google: quem já recebeu o aviso e se o celular aceitou (push_log), quem já ligou a agenda.
+const nvLog: any[] = await get(`push_log?select=user_id,ok,status&kind=eq.nv&at=gte.${new Date(Date.now() - 7 * 864e5).toISOString()}`);
+const integ: any[] = await get('states?select=user_id,agenda:data->integ->>agenda,viu:data->news->>google');
+const nv = states.filter((s) => s.name).map((s) => {
+  const env = sent.find((x) => x.user_id === s.user_id && x.key === 'nv:google');
+  const lg = nvLog.filter((x) => x.user_id === s.user_id);
+  const ig = integ.find((x) => x.user_id === s.user_id) || {};
+  return `${String(s.name).split(' ')[0]}: ${env ? 'aviso ' + env.created_at.slice(11, 16) + 'Z ' + (lg.some((x) => x.ok) ? 'entregue' : lg.length ? 'falhou ' + lg.map((x) => x.status).join('/') : '?') : 'sem aviso'}${ig.viu ? ' · viu' : ''}${ig.agenda ? ' · LIGOU agenda' : ''}`;
+});
+console.log(`::warning::NOVIDADE GOOGLE: ${nv.join(' ‖ ')}`);
+
 // Login com Google ligado?
 const anon = keys.find((k) => k.name === 'anon' || k.type === 'publishable')!.api_key;
 const conf: any = await (await fetch(`https://${REF}.supabase.co/auth/v1/settings`, { headers: { apikey: anon } })).json();
