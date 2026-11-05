@@ -384,7 +384,7 @@ Regras:
   - mercado ou compras: montar a lista; jantar ou encontro: reservar, combinar hor\xE1rio;
   - dinheiro: definir um limite, anotar as contas fixas, ver para onde o dinheiro est\xE1 indo.
   Para montar algo maior (treino da semana, cronograma de estudo), pergunte antes o essencial (quantos dias, objetivo, hor\xE1rio) com "perguntar" + "sugestoes"; com a resposta, crie tudo de uma vez em "rotina". N\xE3o ofere\xE7a o que a pessoa j\xE1 recusou na conversa recente, n\xE3o repita uma pergunta que voc\xEA j\xE1 fez nas \xFAltimas mensagens, e n\xE3o ofere\xE7a nada quando ela estiver mal ou s\xF3 desabafando.
-- "sugestoes": textos curtos (at\xE9 5 palavras), escritos como a PESSOA falaria ao responder ("Montar treino da semana", "3 dias: seg, qua e sex"). Sem sugest\xF5es quando n\xE3o houver pr\xF3ximo passo \xFAtil: null.
+- "sugestoes": textos curtos (at\xE9 5 palavras), escritos como a PESSOA falaria ao responder ("Montar treino da semana", "3 dias: seg, qua e sex"). Nunca ponha valores em dinheiro que a pessoa n\xE3o disse. Sem sugest\xF5es quando n\xE3o houver pr\xF3ximo passo \xFAtil: null.
 - "fala" (em todas as a\xE7\xF5es, menos "conversa" e "perguntar", que usam "resposta"): 1 ou 2 frases curtas da \xCDris comentando o pedido, no jeito dela. N\xC3O cite hor\xE1rios nem datas na "fala" (o app mostra o plano com os hor\xE1rios). A "fala" vem ANTES de a pessoa confirmar: diga o que vai fazer ("vou tirar a academia", "montei assim"), nunca que j\xE1 fez ("cancelei", "coloquei").
 - Sequ\xEAncias: se a pessoa est\xE1 numa sequ\xEAncia de uma atividade do pedido, comemore e use para motivar ("s\xE3o 5 seguidas, n\xE3o vai quebrar agora, n\xE9?").
 - Cobran\xE7a pelo que a pessoa deixou de fazer: s\xF3 quando o pedido tem a ver com essa atividade (ex.: ela pede corrida e vem furando a corrida) ou quando ela mesma est\xE1 enrolando. Em pedidos sem rela\xE7\xE3o (achar um lugar, uma d\xFAvida, um desabafo), n\xE3o cobre.
@@ -435,7 +435,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-05 11:38';
+const APP_VERSION = '2026-11-05 11:40';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
