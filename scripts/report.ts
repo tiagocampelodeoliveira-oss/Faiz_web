@@ -35,6 +35,8 @@ const pessoas = states
       iaFalhas: st.aiFail || 0,
       // motivo de cada falha (só o tipo: cortada, formato, servidor_..., rede); conta antes de 4/11 não tem motivo
       iaFalhasPorMotivo: st.aiFailWhy || {},
+      // o que a pessoa tentou fazer, só o tipo (tarefa, rotina, contas...); conta antes de 5/11 não tem
+      tiposDePedido: st.kinds || {},
       planosConfirmados: st.confirmed || 0,
       ajustados: st.adjusted || 0,
       desfeitos: st.undone || 0,
@@ -79,6 +81,7 @@ const resumo = {
     usaram3DiasOuMais: `${tresDias} de ${base.length}`,
     iaFalhas: base.reduce((a, p) => a + p.iaFalhas, 0),
     iaFalhasPorMotivo: base.reduce((acc: Record<string, number>, p) => { for (const [k, v] of Object.entries(p.iaFalhasPorMotivo as Record<string, number>)) acc[k] = (acc[k] || 0) + Number(v || 0); return acc; }, {}),
+    tiposDePedido: base.reduce((acc: Record<string, number>, p) => { for (const [k, v] of Object.entries(p.tiposDePedido as Record<string, number>)) acc[k] = (acc[k] || 0) + Number(v || 0); return acc; }, {}),
     usaramContas: `${base.filter((p) => p.contasFixas + p.anotacoesDeGasto > 0).length} de ${base.length}`,
     usaramRotinas: `${base.filter((p) => p.rotinas > 0).length} de ${base.length}`,
   },
@@ -105,8 +108,9 @@ const resumo = {
   porPessoa: pessoas.map(({ dias, ...p }) => p),
 };
 
-// O GitHub mostra até 10 anotações por etapa e corta textos muito longos: divide em partes.
+// O GitHub mostra até 10 anotações por etapa e corta cada uma em ~4 KB: divide em partes de 3000 caracteres.
 const txt = JSON.stringify(resumo);
-const partes = Math.ceil(txt.length / 30000);
-for (let i = 0; i < partes; i++) console.log(`::warning::RELATÓRIO ${i + 1}/${partes}: ${txt.slice(i * 30000, (i + 1) * 30000)}`);
+const TAM = 3000;
+const partes = Math.ceil(txt.length / TAM);
+for (let i = 0; i < partes; i++) console.log(`::warning::RELATÓRIO ${i + 1}/${partes}: ${txt.slice(i * TAM, (i + 1) * TAM)}`);
 console.log(JSON.stringify(resumo, null, 2));
