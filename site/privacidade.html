@@ -27,7 +27,14 @@ a{color:#4453C8}
 <h2>Quais dados o Faiz guarda</h2>
 <ul>
   <li><b>O que você coloca no app:</b> seu primeiro nome, tarefas, rotinas, lembretes, contas e gastos que você anota, e as últimas mensagens da conversa com a Íris.</li>
-  <li><b>Conta Google (opcional):</b> se você tocar em "Entrar com Google", recebemos só seu <b>nome e e-mail</b>, para você não perder os dados ao trocar de celular. Não acessamos seus e-mails, sua agenda do Google nem seus arquivos.</li>
+  <li><b>Conta Google (opcional):</b> se você tocar em "Entrar com Google", recebemos só seu <b>nome e e-mail</b>, para você não perder os dados ao trocar de celular.</li>
+  <li><b>Integrações com o Google (opcionais, você liga uma por uma em Mais):</b>
+    <ul>
+      <li><b>Google Agenda:</b> o app lê seus compromissos dos próximos 14 dias para montar planos sem conflito e, se você ativar, coloca lá o que você confirmou no Faiz.</li>
+      <li><b>Contatos:</b> o app procura o nome que você citou ("jantar com a Ana") para oferecer o botão de avisar a pessoa no WhatsApp. A lista de contatos não é guardada.</li>
+      <li><b>Gmail (somente leitura):</b> o app procura e-mails de boletos e faturas dos últimos 40 dias e mostra valor e vencimento para você anotar em Contas. O Faiz nunca envia, apaga ou altera e-mails, e o texto dos e-mails não é guardado: só fica salvo o que você decidir anotar.</li>
+    </ul>
+    Essas leituras são feitas pelo seu próprio celular, direto no Google. Nosso servidor guarda apenas a autorização do Google (para o acesso continuar valendo), nunca o conteúdo da agenda, dos contatos ou dos e-mails. Você pode desligar a qualquer momento em Mais ou em myaccount.google.com/permissions. O uso de dados recebidos das APIs do Google segue a Política de Dados do Usuário dos Serviços de API do Google, incluindo os requisitos de Uso Limitado.</li>
   <li><b>Avisos no celular:</b> um endereço técnico que o seu celular gera para receber os avisos.</li>
   <li><b>Localização:</b> só quando você pede um lugar perto ("padaria mais próxima"), e apenas naquele momento. Não guardamos sua localização.</li>
   <li><b>Uso do app:</b> contadores (quantos pedidos, tarefas concluídas, dias de uso), o tipo de aparelho e as respostas da pesquisa do teste. Isso serve para melhorar o Faiz e nunca inclui o texto das suas conversas.</li>
@@ -47,7 +54,7 @@ a{color:#4453C8}
   <li><b>Anthropic</b> (inteligência artificial Claude): recebe o seu pedido, o primeiro nome, a agenda dos próximos dias, um resumo das contas e as últimas mensagens, só para responder.</li>
   <li><b>Microsoft Azure</b> (voz da Íris): recebe o texto da resposta para transformar em voz.</li>
   <li><b>OpenStreetMap / Photon</b> (mapas): recebe a localização aproximada, só quando você pede um lugar perto.</li>
-  <li><b>Apple e Google</b>: entregam os avisos no seu celular.</li>
+  <li><b>Apple e Google</b>: entregam os avisos no seu celular. O Google também fornece as integrações que você ligar.</li>
 </ul>
 
 <h2>Segurança</h2>
