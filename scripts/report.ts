@@ -11,6 +11,7 @@ const get = async (path: string) => (await fetch(`https://${REF}.supabase.co/res
 
 const states: { user_id: string; data: any; updated_at: string }[] = await get('states?select=user_id,data,updated_at');
 const owners = new Set(((await get('owners?select=user_id')) as any[]).map((o) => o.user_id));
+const pushLog: any[] = await get(`push_log?select=user_id,at,kind,status,ok,gone&at=gte.${new Date(Date.now() - 14 * 864e5).toISOString()}&order=at.desc&limit=5000`);
 const livres = new Set(((await get('unlimited?select=user_id')) as any[]).map((o) => o.user_id));
 const aiLog: any[] = await get(`ai_log?select=at,status,stop,ms,out_tokens,model&at=gte.${new Date(Date.now() - 14 * 864e5).toISOString()}&order=at.desc&limit=5000`);
 const subs = new Set(((await get('subs?select=user_id')) as any[]).map((s) => s.user_id));
@@ -27,6 +28,9 @@ const pessoas = states
       nome: String(d.name || '').trim().split(/\s+/)[0] || '(sem nome)',
       dono: owners.has(s.user_id),
       semLimite: livres.has(s.user_id),
+      respostaAoPedirAvisos: st.pushAsk?.resposta || null,
+      reinscricoes: st.pushResub || 0,
+      avisos14dias: (() => { const l = pushLog.filter((x) => x.user_id === s.user_id); return { entregues: l.filter((x) => x.ok).length, recusados: l.filter((x) => !x.ok).length, ultimo: l[0] ? `${l[0].at.slice(0, 16)} ${l[0].ok ? 'ok' : 'erro ' + l[0].status}${l[0].gone ? ' (inscrição apagada)' : ''}` : null }; })(),
       inicio: d.startDate || [...(st.days || [])].sort()[0] || null,
       ultimoUso: s.updated_at.slice(0, 10),
       aparelho: st.device || '?',

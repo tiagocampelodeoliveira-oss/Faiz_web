@@ -4,6 +4,11 @@ import { json, rest, vapid } from '../_shared/env.ts';
 import { dueNotices, type AppState } from '../_shared/plan.ts';
 import { sendPush } from '../_shared/webpush.ts';
 
+/** Resultado de cada aviso (sem o texto), para achar quem parou de receber e por quê. Nunca derruba o relógio. */
+async function pushLog(userId: string, kind: string, endpoint: string, r: { ok: boolean; status: number; gone: boolean }): Promise<void> {
+  try { await rest('push_log', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: userId, kind, host: new URL(endpoint).host, status: r.status, ok: r.ok, gone: r.gone }) }); } catch (e) { console.error('push_log', e); }
+}
+
 Deno.serve(async (req) => {
   const secret = Deno.env.get('FAIZ_TICK_SECRET');
   if (!secret || req.headers.get('x-tick-secret') !== secret) return json({ error: 'forbidden' }, 403);
@@ -37,6 +42,7 @@ Deno.serve(async (req) => {
       for (const n of due.filter((d) => mine.has(d.key))) {
         for (const s of byUser.get(st.user_id) || []) {
           const r = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title: n.title, body: n.body, url: n.url, tag: n.tag }, keys, subject);
+          await pushLog(st.user_id, n.key.split(':')[0], s.endpoint, r);
           if (r.ok) summary.sent++;
           else {
             summary.failed++;

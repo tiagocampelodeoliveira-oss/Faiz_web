@@ -147,6 +147,7 @@ async function testPush(userId: string): Promise<Response> {
   const errors: string[] = [];
   for (const s of subs) {
     const r = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title: 'Teste do Faiz', body: 'Funcionou! É assim que eu vou te avisar.', url: './', tag: 'teste' }, keys, subject, 600);
+    try { await rest('push_log', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: userId, kind: 'teste', host: new URL(s.endpoint).host, status: r.status, ok: r.ok, gone: r.gone }) }); } catch { /* registro não derruba o teste */ }
     if (r.ok) sent++;
     else {
       failed++;

@@ -96,3 +96,17 @@ create index if not exists ai_log_at on public.ai_log (at desc);
 -- o registro fica mesmo se a pessoa (ou o usuário do teste automático) for apagada
 alter table public.ai_log drop constraint if exists ai_log_user_id_fkey;
 alter table public.ai_log add constraint ai_log_user_id_fkey foreign key (user_id) references auth.users on delete set null;
+
+-- Resultado de cada aviso enviado (sem o texto): entregue, recusado, inscrição apagada. Só o servidor lê.
+create table if not exists public.push_log (
+  id bigint generated always as identity primary key,
+  user_id uuid references auth.users on delete set null,
+  at timestamptz not null default now(),
+  kind text,
+  host text,
+  status int,
+  ok boolean,
+  gone boolean
+);
+alter table public.push_log enable row level security;
+create index if not exists push_log_at on public.push_log (at desc);

@@ -402,7 +402,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-05 08:39';
+const APP_VERSION = '2026-11-05 08:52';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -587,9 +587,21 @@ const Push = (() => {
     return 'on';
   }
   /** Reinscreve em silêncio ao abrir (o celular pode trocar o endereço de aviso). */
+  /** Ao abrir: reenvia a inscrição ao servidor. Se a permissão continua dada mas a inscrição sumiu
+      (o serviço do Google ou da Apple a descartou), inscreve de novo sozinho, sem perguntar nada. */
   async function refresh() {
-    if ((await state()) !== 'on') return;
-    try { const r = await ready; const sub = await r.pushManager.getSubscription(); if (sub) await Cloud.fn('subscribe', { subscription: sub.toJSON() }); } catch (e) {}
+    if (!canNotifyHere() || permission() !== 'granted') return;
+    try {
+      const r = await ready; if (!r) return;
+      let sub = await r.pushManager.getSubscription();
+      if (!sub) {
+        if (!vapidKey) { try { vapidKey = (await Cloud.fn('config', {}, false)).vapidPublicKey || ''; } catch (e) {} }
+        if (!vapidKey) return;
+        sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key(vapidKey) });
+        S.stats.pushResub = (S.stats.pushResub || 0) + 1; save();
+      }
+      await Cloud.fn('subscribe', { subscription: sub.toJSON() });
+    } catch (e) { U.lastError = 'reinscrição: ' + (e?.message || e); S.stats.pushResubErr = String(e?.message || e).slice(0, 80); save(); }
   }
   return { state, enable, refresh, ready };
 })();
@@ -601,7 +613,7 @@ async function updatePushState() { U.pushState = await Push.state(); render(true
   try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; U.aiCredit = c.aiCredit !== false; U.ttsOk = c.tts === true; }
   catch (e) { U.aiState = 'off'; }
   if (await Cloud.pull()) { syncRoutines(); render(); } else render(true);
-  if (S.onboarded) { Cloud.push(); Push.refresh(); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; U.trialOver = !!m.trialOver; if (U.trialOver) render(true); if (U.tab === 'mais') render(true); }).catch(() => {}); }
+  if (S.onboarded) { Cloud.push(); Push.refresh().then(updatePushState); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; U.trialOver = !!m.trialOver; if (U.trialOver) render(true); if (U.tab === 'mais') render(true); }).catch(() => {}); }
   updatePushState();
 })();
 
@@ -853,10 +865,12 @@ async function enableNotify(fromPermit) {
   try {
     const st = await Push.enable();
     U.pushState = st;
+    S.stats.pushAsk = { resposta: st, em: new Date().toISOString() }; save();
     if (st === 'on') { if (fromPermit) S.permAsked = true; render(true); return pushCheck(); }
     else if (st === 'denied') toast('Os avisos foram bloqueados. Veja em Mais como liberar.');
     else if (st === 'unsupported') toast('Este navegador não aceita avisos.');
   } catch (e) {
+    S.stats.pushAsk = { resposta: 'erro', erro: String(e?.message || e).slice(0, 80), em: new Date().toISOString() }; save();
     toast('Não consegui ligar os avisos agora. Confira a internet e tente de novo em Mais.');
   }
   if (fromPermit) { S.permAsked = true; save(); }
@@ -976,7 +990,7 @@ function openLink(href) {
 navigator.serviceWorker?.addEventListener('message', (e) => { if (e.data?.type === 'open') openLink(e.data.url); });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { clearTimeout(saveT); persistLocal(); Cloud.push(); }
-  else { markDay(); syncRoutines(); updatePushState(); clearNotifications(); }
+  else { markDay(); syncRoutines(); (S.onboarded ? Push.refresh() : Promise.resolve()).then(updatePushState); clearNotifications(); }
 });
 
 /* ---------- Voz: falar com o Faiz e ouvir a resposta ---------- */
@@ -1267,12 +1281,27 @@ function missedCount(t) {
   for (const d of [...byDay.keys()].sort().reverse()) { if (byDay.get(d)) break; k++; }
   return k;
 }
+/** Como liberar os avisos bloqueados, pelo aparelho (no app instalado do Android não existe o cadeado do navegador). */
+const COMO_LIBERAR = IS_IOS ? 'Ajustes do iPhone › Notificações › Faiz › Permitir Notificações.'
+  : /Android/.test(UA) ? (STANDALONE ? 'Configurações do Android › Apps › Faiz › Notificações › ligar. Se o Faiz não aparecer, abra Apps › Chrome › Notificações › ligar. Em Bateria, escolha "Sem restrições".' : 'no Chrome, toque nos 3 pontinhos › Configurações › Configurações do site › Notificações › permita o Faiz.')
+  : 'nas configurações do navegador, permita notificações para este site.';
+/** Cartão no Hoje: sem avisos o Faiz não funciona como governanta, então fica bem à vista. */
+function avisosOffCard() {
+  const st = U.pushState;
+  if (!S.onboarded || !['off', 'denied', 'install'].includes(st)) return '';
+  const corpo = st === 'denied' ? `O celular bloqueou meus avisos. Para liberar: ${COMO_LIBERAR}`
+    : st === 'install' ? 'No iPhone eu só consigo te avisar com o Faiz na tela de início.'
+    : 'Sem eles eu não consigo te lembrar de nada na hora certa.';
+  const btn = st === 'off' ? '<button class="btn" type="button" data-act="notify" style="margin-top:10px">Ativar avisos</button>'
+    : st === 'install' ? '<button class="btn" type="button" data-act="showinstall" style="margin-top:10px">Como colocar na tela de início</button>' : '';
+  return `<div class="card" style="padding:14px 16px;margin-top:16px;border:2px solid var(--peach)"><div class="row" style="gap:10px;align-items:flex-start">${irisImg('cansada', 40)}<div style="flex:1"><b>Seus avisos estão desligados 😟</b><div class="meta" style="margin-top:4px;color:var(--ink)">${esc(corpo)}</div></div></div>${btn}</div>`;
+}
 function avisosCard() {
   const n = S.settings.notify, st = U.pushState;
   const status = {
     on: `<div class="okbox">${I.check} Avisos ligados neste celular</div>`,
     off: `<div class="warn">Os avisos estão desligados neste celular.</div><button class="btn" type="button" data-act="notify">Ativar avisos</button>`,
-    denied: `<div class="warn">O celular bloqueou os avisos do Faiz. Para liberar: ${IS_IOS ? 'Ajustes do iPhone › Notificações › Faiz › Permitir Notificações.' : 'toque no cadeado ao lado do endereço › Permissões › Notificações › Permitir.'} Depois volte aqui.</div>`,
+    denied: `<div class="warn">O celular bloqueou os avisos do Faiz. Para liberar: ${COMO_LIBERAR} Depois feche e abra o Faiz.</div>`,
     install: `<div class="warn">No iPhone, os avisos só funcionam com o Faiz na tela de início.</div><button class="btn" type="button" data-act="showinstall">Como colocar na tela de início</button>`,
     unsupported: `<div class="warn">Este navegador não aceita avisos. No iPhone, use o Safari (iOS 16.4 ou mais novo); no Android, o Chrome.</div>`,
     checking: `<p class="meta" style="margin:0">Verificando...</p>`,
@@ -1346,6 +1375,7 @@ const screens = {
       <div class="row" style="justify-content:flex-end"><button class="avatar" type="button" data-act="tab" data-v="mais" aria-label="Mais opções">${esc((first || 'F').charAt(0).toUpperCase())}</button></div>
       <div class="meta" style="font-size:15px;margin-top:14px">${esc(L.longDate(d))}</div>
       <h1 class="greeting">${esc(L.greeting(new Date()))}${first ? ', ' + esc(first) : ''} 👋</h1>
+      ${avisosOffCard()}
       ${U.trialOver && !S.trialSeen ? `<button class="card irisline" type="button" data-act="trialok">${irisImg('comemorando', 44)}<span><b>Fechamos os 7 dias! Valeu demais por testar 💜</b> Minha inteligência pausou por enquanto, mas avisos, contas e rotinas continuam. Toque para fechar.</span></button>` : ''}
       ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span><b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}

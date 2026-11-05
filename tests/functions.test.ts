@@ -43,6 +43,7 @@ const db = {
   reports: [] as any[],
   unlimited: [] as any[],
   ai_log: [] as any[],
+  push_log: [] as any[],
 };
 const pushed: any[] = [];
 let pushStatus = 201;
@@ -111,6 +112,8 @@ test('relógio manda o aviso da corrida às 18:20, e só uma vez', async () => {
   const r2 = await (await post(tick, {}, { 'x-tick-secret': 's3cret' })).json();
   assert.equal(r2.sent, 0);
   assert.equal(pushed.length, 1);
+  assert.deepEqual(db.push_log.map((x) => [x.kind, x.host, x.status, x.ok]), [['t', 'web.push.apple.com', 201, true]], 'resultado do aviso registrado, sem o texto');
+  assert.ok(!('title' in db.push_log[0]) && !('body' in db.push_log[0]));
 });
 
 test('celular que saiu (410) é apagado', async () => {
@@ -120,6 +123,7 @@ test('celular que saiu (410) é apagado', async () => {
   const r = await (await post(tick, {}, { 'x-tick-secret': 's3cret' })).json();
   assert.equal(r.removed, 1, JSON.stringify(r));
   assert.equal(db.subs.length, 0);
+  assert.equal(db.push_log.at(-1).gone, true, 'inscrição apagada fica registrada');
   pushStatus = 201;
 });
 
