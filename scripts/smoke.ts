@@ -58,6 +58,12 @@ if (token) {
   console.log(`${nOk ? '::notice::OK ' : '::warning::AVISO '} padarias perto da Av. Paulista — ${nOk ? nb.body.places.map((p: any) => `${p.nome} ${p.dist} m`).slice(0, 3).join('; ') + ' | ' + (nb.body.diag || []).join(', ') : JSON.stringify(nb.body).slice(0, 400)}`);
 
   // 4b2. Voz da Íris (Azure). Sem chave: só avisa (o app usa a voz do celular).
+  {
+    // Google: ligado no servidor e, sem ter ligado, a chave temporária responde "google_none"
+    const r = await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'gtoken' }) });
+    const b = await r.json().catch(() => ({}));
+    console.log(`${cfg.body?.google === true && b?.error === 'google_none' ? '::notice::OK ' : '::warning::AVISO '} integrações com o Google — config.google=${cfg.body?.google} gtoken=${r.status} ${b?.error || ''}`);
+  }
   if (cfg.body?.tts) {
     const r = await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'tts', text: 'Oi! Eu sou a Íris.' }) });
     const b = new Uint8Array(await r.arrayBuffer());
