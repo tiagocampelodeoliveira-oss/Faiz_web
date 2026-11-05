@@ -306,3 +306,15 @@ test('teste de 7 dias: IA pausa a partir do 8º dia (contando o dia em que come�
   assert.deepEqual(trialInfo('2026-11-03', at('2026-11-10', '00:01')), { dia: 7, acabou: true });
   assert.deepEqual(trialInfo(undefined, at('2026-11-10', '10:00')), { dia: 0, acabou: false }, 'sem data de início, não bloqueia');
 });
+
+test('novidade do Google: avisa 1 vez quem ainda não ligou a agenda, de dia, na semana do anúncio', () => {
+  const nv = (st: any, dia: string, hora: string, sent = new Set<string>()) =>
+    dueNotices({ name: 'Ana', settings: { tz: SP }, tasks: [], onboarded: true, ...st } as any, at(dia, hora), sent).filter((n) => n.tag === 'novidade');
+  assert.deepEqual(nv({}, '2026-11-05', '10:30').map((n) => [n.key, n.url]), [['nv:google', './?v=novidade']]);
+  assert.equal(nv({}, '2026-11-05', '09:30').length, 0, 'cedo demais');
+  assert.equal(nv({}, '2026-11-05', '21:30').length, 0, 'tarde demais');
+  assert.equal(nv({}, '2026-11-13', '12:00').length, 0, 'passou da semana');
+  assert.equal(nv({ integ: { agenda: true } }, '2026-11-05', '12:00').length, 0, 'já ligou');
+  assert.equal(nv({ news: { google: true } }, '2026-11-05', '12:00').length, 0, 'já viu no app');
+  assert.equal(nv({}, '2026-11-05', '12:00', new Set(['nv:google'])).length, 0, 'já recebeu');
+});

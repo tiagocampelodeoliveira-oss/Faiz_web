@@ -403,7 +403,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-05 09:55';
+const APP_VERSION = '2026-11-05 10:09';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -912,6 +912,26 @@ function integracoesCard() {
     ${Object.values(S.integ || {}).some(Boolean) ? '<button class="setrow" type="button" data-act="g-desligar"><div class="txt"><div class="t" style="color:var(--red-ink)">Desligar as integrações</div></div></button>' : ''}
   </div>`;
 }
+/* Novidade para quem já usa: integrações com o Google (cartão no Hoje + aviso do servidor que abre ?v=novidade). */
+const novidadeDevida = () => U.googleOk && S.onboarded && !S.news?.google && !(integ('agenda') && integ('contatos') && integ('gmail'));
+function novidadeCard() {
+  if (!novidadeDevida()) return '';
+  return `<div class="card irisline" style="flex-wrap:wrap">${irisImg('comemorando', 44)}<span><b>Novidade! Agora eu converso com o seu Google 🎉</b> Trago seus compromissos do Google Agenda, acho boletos no Gmail e mando convite no WhatsApp pros seus contatos.</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="news-ok">Agora não</button><button class="pill navy" type="button" data-act="novidade">Ver como ligar</button></div></div>`;
+}
+function novidadeSheet() {
+  S.news = { ...(S.news || {}), google: true }; save();
+  const it = (k, em, t, d) => `<div class="setrow"><span style="font-size:22px">${em}</span><div class="txt"><div class="t">${t}</div><div class="meta">${d}</div></div>${integ(k) ? '<span class="pill ok">Ligado</span>' : `<button class="pill navy" type="button" data-nv="${k}">Ligar</button>`}</div>`;
+  sheet(`<div class="row" style="gap:10px">${irisImg('comemorando', 48)}<div class="sub" style="flex:1"><b>Agora eu converso com o seu Google</b><br>Ligue o que quiser. Cada um pede sua permissão, e dá para desligar quando quiser em Mais.</div></div>
+    <div class="card" style="margin:0">
+      ${it('agenda', '📅', 'Google Agenda', 'Trago seus compromissos pra cá, não marco nada por cima e levo pro Google o que você confirmar comigo.')}
+      ${it('contatos', '👥', 'Contatos', 'Marcou algo "com a Ana"? Eu ofereço mandar o convite no WhatsApp dela.')}
+      ${it('gmail', '📧', 'Gmail: contas e boletos', 'Acho faturas e boletos no seu e-mail e você só toca em Anotar. Não leio outros e-mails.')}
+    </div>
+    <button class="btn light" type="button" id="nvFechar">Agora não</button>`, (el) => {
+    el.querySelector('#nvFechar').onclick = () => { closeSheet(); render(true); };
+    el.querySelectorAll('[data-nv]').forEach((b) => { b.onclick = () => { closeSheet(); setTimeout(() => ligarGoogle(b.dataset.nv), 250); }; });
+  });
+}
 function gmailCard() {
   if (!U.googleOk) return '';
   if (!integ('gmail')) return `<button class="card irisline" type="button" data-act="g-ligar" data-v="gmail" style="margin-top:14px">${irisImg('oculos', 40)}<span><b>Procurar contas no meu Gmail</b><br><span class="meta">Eu acho faturas e boletos e você só confirma.</span></span></button>`;
@@ -1288,6 +1308,7 @@ function openLink(href) {
   if (t) { U.tab = 'hoje'; render(); taskSheet(t); }
   else if (v === 'noite') { U.tab = 'hoje'; render(); nightSheet(); }
   else if (v === 'planejar') { U.tab = 'faz'; U.scrollChat = true; render(); }
+  else if (v === 'novidade') { U.tab = 'hoje'; render(); novidadeSheet(); }
   else if (v === 'contas') { U.tab = 'contas'; U.mes = null; render(); window.scrollTo(0, 0); }
   else if (v === 'pesquisa') { U.tab = 'hoje'; render(); const q = pesquisaDevida(); if (q) surveySheet(q); else toast('Você já respondeu. Valeu! 💜'); }
   try { history.replaceState(null, '', location.pathname); } catch (e) {}
@@ -1682,7 +1703,8 @@ const screens = {
       <div class="meta" style="font-size:15px;margin-top:14px">${esc(L.longDate(d))}</div>
       <h1 class="greeting">${esc(L.greeting(new Date()))}${first ? ', ' + esc(first) : ''} 👋</h1>
       ${avisosOffCard()}
-      ${!S.account?.google && S.stats.days.length >= 2 && !S.googleNudge ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Salva sua conta com o Google?</b> Assim você não perde nada se trocar de celular.</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="google-depois">Depois</button><button class="pill navy" type="button" data-act="google-link">Salvar com Google</button></div></div>` : ''}
+      ${novidadeCard()}
+      ${!S.account?.google && S.stats.days.length >= 2 && !S.googleNudge && !novidadeDevida() ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Salva sua conta com o Google?</b> Assim você não perde nada se trocar de celular.</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="google-depois">Depois</button><button class="pill navy" type="button" data-act="google-link">Salvar com Google</button></div></div>` : ''}
       ${U.trialOver && !S.trialSeen ? `<button class="card irisline" type="button" data-act="trialok">${irisImg('comemorando', 44)}<span><b>Fechamos os 7 dias! Valeu demais por testar 💜</b> Minha inteligência pausou por enquanto, mas avisos, contas e rotinas continuam. Toque para fechar.</span></button>` : ''}
       ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span><b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}
@@ -2138,6 +2160,8 @@ document.addEventListener('click', (e) => {
     case 'g-anotar': gmailAnotar(id); break;
     case 'g-ignorar': gmailIgnorar(id); break;
     case 'google-login': entrarGoogle('login'); break;
+    case 'news-ok': S.news = { ...(S.news || {}), google: true }; save(); render(true); break;
+    case 'novidade': novidadeSheet(); break;
     case 'google-depois': S.googleNudge = true; save(); render(true); break;
     case 'trialok': S.trialSeen = true; save(); render(true); break;
     case 'delroutine': { const r = S.routines.find((x) => x.id === id); if (r) confirmSheet(`Apagar a rotina "${r.title}"?`, 'As próximas vezes saem da agenda. O que você já fez continua no histórico.', 'Apagar', () => { deleteRoutine(id); render(true); toast('Rotina apagada'); }); break; }

@@ -144,6 +144,13 @@ const IRIS = {
 type Extras = 'vespera' | 'umaHora' | 'conferir' | 'amanha' | 'semana' | 'sumiu';
 
 /** Avisos devidos agora. `sent` = chaves já enviadas (para nunca repetir). */
+/** Anúncio de novidade para quem já usa o Faiz (manda 1 vez por pessoa). Para anunciar outra, troque o id e o texto. */
+export const NOVIDADE = {
+  id: 'google', de: '2026-11-05', ate: '2026-11-12',
+  title: 'Novidade: o Faiz agora conversa com o seu Google 🎉',
+  body: 'Usa Google Agenda? Eu trago seus compromissos pra cá e levo o que você marcar comigo. Toque pra ligar em 1 minuto.',
+};
+
 export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notice[] {
   const ns = state.settings?.notify ?? {};
   if (ns.enabled === false) return [];
@@ -255,6 +262,11 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const sem = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(ultimo + 'T12:00:00Z')) / 864e5);
     if (sem === 2 || sem === 5) add({ key: `z:${date}`, title: IRIS.sumiu.at(pick(date))!, body: IRIS.sumiuCorpo.at(pick(date))!, url: './', tag: 'sumiu' });
   }
+  // 4d. Novidade (uma vez só, entre 10:00 e 21:00, até o fim da semana do anúncio): integrações com o Google.
+  const novidade = NOVIDADE;
+  const st = state as any;
+  if (date >= novidade.de && date <= novidade.ate && min >= 10 * 60 && min < 21 * 60 && (st.onboarded || all.length) && !st.news?.[novidade.id] && !st.integ?.agenda)
+    add({ key: `nv:${novidade.id}`, title: novidade.title, body: novidade.body, url: './?v=novidade', tag: 'novidade' });
   // 5. Contas da casa (caderno): 1 a 3 dias antes, no dia e no dia seguinte se ficou atrasada. Entre 09:00 e 12:00.
   if (min >= 9 * 60 && min < 12 * 60) {
     const pagas = state.fin?.pagas ?? {};
