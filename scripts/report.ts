@@ -61,6 +61,7 @@ const pessoas = states
       definiuLimiteDeGastos: !!d.fin?.limite,
       // só quantidades, nunca valores
       informouSaldo: !!d.fin?.saldo,
+      calendarioDoCelular: !!d.calFeed,
       gastosNoCredito: (d.fin?.mov ?? []).filter((x: any) => x?.forma === 'credito').length,
       faturasPagas: (d.fin?.faturas ?? []).length,
       contasSemanaisOuAnuais: (d.fin?.fixas ?? []).filter((x: any) => x?.freq === 'semanal' || x?.freq === 'anual').length,

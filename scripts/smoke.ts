@@ -64,6 +64,15 @@ if (token) {
     const b = await r.json().catch(() => ({}));
     console.log(`${cfg.body?.google === true && b?.error === 'google_none' ? '::notice::OK ' : '::warning::AVISO '} integrações com o Google — config.google=${cfg.body?.google} gtoken=${r.status} ${b?.error || ''}`);
   }
+  {
+    // calendário assinado: cria o link e o Calendário consegue ler o .ics sem login
+    const r = await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'calfeed' }) });
+    const b = await r.json().catch(() => ({}));
+    const g = b?.url ? await fetch(b.url) : null;
+    const t = g ? await g.text() : '';
+    console.log(`${g?.ok && /BEGIN:VCALENDAR/.test(t) && /text\/calendar/.test(g.headers.get('content-type') || '') ? '::notice::OK ' : '::warning::AVISO '} calendário do celular — ${r.status} ${g?.status} ${g?.headers.get('content-type')} ${t.length} bytes`);
+    await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'calstop' }) });
+  }
   if (cfg.body?.tts) {
     const r = await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'tts', text: 'Oi! Eu sou a Íris.' }) });
     const b = new Uint8Array(await r.arrayBuffer());

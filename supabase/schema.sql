@@ -120,3 +120,12 @@ create table if not exists public.google_tokens (
   updated_at timestamptz not null default now()
 );
 alter table public.google_tokens enable row level security;
+
+-- Calendário assinado (iPhone/Android): link secreto por pessoa. Só o servidor lê.
+create table if not exists public.cal_feeds (
+  user_id uuid primary key references auth.users on delete cascade,
+  token text not null unique,
+  created_at timestamptz not null default now(),
+  last_fetch timestamptz
+);
+alter table public.cal_feeds enable row level security;

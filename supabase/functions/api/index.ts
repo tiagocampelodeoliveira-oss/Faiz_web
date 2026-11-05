@@ -3,7 +3,8 @@
 import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
 import { falar, ttsLigado } from '../_shared/tts.ts';
-import { trialInfo } from '../_shared/plan.ts';
+import { localNow, trialInfo } from '../_shared/plan.ts';
+import { buildIcs } from '../_shared/ics.ts';
 
 const AI_DAILY_LIMIT = 40;
 const MODEL = Deno.env.get('FAIZ_AI_MODEL') || 'claude-sonnet-5-5';
@@ -252,6 +253,20 @@ const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  if (req.method === 'GET') {
+    // Calendário assinado: o app do Calendário busca aqui, sem login, pelo link secreto.
+    const tk = new URL(req.url).searchParams.get('cal') || '';
+    if (!/^[a-f0-9]{40}$/.test(tk)) return new Response('not found', { status: 404 });
+    try {
+      const [f] = await rest(`cal_feeds?token=eq.${tk}&select=user_id`);
+      if (!f) return new Response('not found', { status: 404 });
+      const [st] = await rest(`states?user_id=eq.${f.user_id}&select=data`);
+      const data = st?.data || {};
+      const { date } = localNow(new Date(), data.settings?.tz || 'America/Sao_Paulo');
+      rest(`cal_feeds?user_id=eq.${f.user_id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_fetch: new Date().toISOString() }) }).catch(() => {});
+      return new Response(buildIcs(data, date), { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Disposition': 'inline; filename="faiz.ics"' } });
+    } catch (e) { console.error('cal', e); return new Response('erro', { status: 500 }); }
+  }
   if (req.method !== 'POST') return json({ error: 'method' }, 405);
   let body: Record<string, any> = {};
   try { body = await req.json(); } catch { /* corpo vazio */ }
@@ -268,6 +283,19 @@ Deno.serve(async (req) => {
     if (action === 'nearby') return await nearby(body);
     if (action === 'owner') return await becomeOwner(user.id, body.whatsapp);
     if (action === 'report') return await report(user.id, body.text, body.ctx, body.name);
+    if (action === 'calfeed') {
+      // link secreto do calendário (cria na primeira vez); "novo": troca o link (o antigo para de funcionar)
+      if (body.novo) await rest(`cal_feeds?user_id=eq.${user.id}`, { method: 'DELETE' });
+      let [f] = await rest(`cal_feeds?user_id=eq.${user.id}&select=token`);
+      if (!f) {
+        const token = [...crypto.getRandomValues(new Uint8Array(20))].map((b) => b.toString(16).padStart(2, '0')).join('');
+        await rest('cal_feeds', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: user.id, token }) });
+        f = { token };
+      }
+      const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/api?cal=${f.token}`;
+      return json({ url, webcal: url.replace(/^https:/, 'webcal:') });
+    }
+    if (action === 'calstop') { await rest(`cal_feeds?user_id=eq.${user.id}`, { method: 'DELETE' }); return json({ ok: true }); }
     if (action === 'gsave') return await googleSave(user.id, body.refresh_token, body.scopes);
     if (action === 'gtoken') return await googleToken(user.id);
     if (action === 'gforget') { await rest(`google_tokens?user_id=eq.${user.id}`, { method: 'DELETE' }); return json({ ok: true }); }
