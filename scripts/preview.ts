@@ -35,14 +35,11 @@ const fin = L.applyFin(L.emptyFin(), [
 ]).fin;
 // Conversas sobre dinheiro: cada lista é uma conversa (a frase seguinte vê as anteriores e o caderno atualizado, como no app).
 const conversas: string[][] = [
-  ['tenho 2.300 na conta', 'quanto ainda posso gastar esse mês?'],
-  ['gastei 45 no mercado e 18 no uber', 'na verdade o mercado foi 54'],
-  ['comprei um tênis de 300 no crédito', 'paguei a fatura do cartão'],
-  ['quanto gastei nesta semana?', 'e com comida?'],
-  ['paguei a luz', 'anotei errado, apaga o último gasto'],
-  ['minha academia é 110 todo dia 15', 'recebi 500 de um freela'],
-  ['dá pra gastar 400 no fim de semana?'],
-  ['gastei no mercado'],
+  ['quero botar um boleto de dezembro, vou pagar dia 9 de dezembro'],
+  ['tenho um boleto de 350 reais pra pagar dia 9 de dezembro'],
+  ['me lembra de pagar o boleto da faculdade dia 9 de dezembro'],
+  ['boleto de 120 vence 09/12'],
+  ['quero botar um boleto de dezembro', 'dia 9 de dezembro'],
 ];
 let caderno = fin;
 for (const conv of conversas) {
@@ -60,7 +57,7 @@ for (const conv of conversas) {
       if (rep.fin?.length) caderno = L.applyFin(caderno, rep.fin).fin;
       const cx = L.caixa(caderno, L.dateKey(new Date()));
       const tipos = (cmd.acao === 'varios' ? (cmd.comandos || []) : [cmd]).map((c: any) => c.financa?.tipo || c.acao).join('+');
-      texto = `[${tipos}] ${rep.text} ${rep.fin ? `[caderno: ${rep.fin.map((o: any) => o.type).join(',')}]` : ''} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} {saldo ${cx.saldo == null ? '-' : cx.saldo / 100} · comprometido ${cx.comprometido / 100} · disponível ${cx.disponivel == null ? '-' : cx.disponivel / 100}}`;
+      texto = `[${tipos}] {${JSON.stringify(cmd).slice(0, 260)}} ${rep.text} ${rep.fin ? `[caderno: ${rep.fin.map((o: any) => o.type).join(',')}]` : ''} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} ${rep.plan ? `[plano: ${JSON.stringify(rep.plan).slice(0, 200)}]` : ''} {saldo ${cx.saldo == null ? '-' : cx.saldo / 100} · comprometido ${cx.comprometido / 100} · disponível ${cx.disponivel == null ? '-' : cx.disponivel / 100}}`;
       recent.push({ who: 'me', text: frase }, { who: 'bot', text: rep.text });
     } catch (e) { texto = `(resposta fora do formato) ${String(body.text || JSON.stringify(body)).slice(0, 160)}`; }
     linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
