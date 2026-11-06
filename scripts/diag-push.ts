@@ -44,6 +44,13 @@ const gl = ga.filter((x) => x.data?.integ?.agenda).map((x) => {
 });
 console.log(`::warning::GOOGLE AGENDA: ${gl.join(' ‖ ') || 'ninguém ligou'}`);
 
+// Uso da IA (para estimar o crédito): chamadas e tokens de saída por dia, desde o registro (5/11).
+const ai: any[] = await get('ai_log?select=at,model,status,out_tokens&order=at.asc&limit=10000');
+const porDia = new Map<string, { n: number; ok: number; out: number; sonnet: number }>();
+for (const x of ai) { const d = new Date(Date.parse(x.at) - 3 * 3600e3).toISOString().slice(0, 10); const o = porDia.get(d) ?? { n: 0, ok: 0, out: 0, sonnet: 0 }; o.n++; if (x.status === 200) o.ok++; o.out += x.out_tokens || 0; if (/sonnet/.test(x.model || '')) o.sonnet++; porDia.set(d, o); }
+const reqs = (await get('states?select=data->stats->>requests')).reduce((a: number, x: any) => a + (+x.requests || 0), 0);
+console.log(`::warning::IA USO: ${[...porDia].map(([d, o]) => `${d}: ${o.n} chamadas (${o.ok} ok, ${o.sonnet} Sonnet), ${o.out} tokens de saída`).join(' ‖ ')} ‖ total ${ai.length} chamadas registradas; pedidos somados de todos desde o início: ${reqs}`);
+
 // Login com Google ligado?
 const anon = keys.find((k) => k.name === 'anon' || k.type === 'publishable')!.api_key;
 const conf: any = await (await fetch(`https://${REF}.supabase.co/auth/v1/settings`, { headers: { apikey: anon } })).json();
