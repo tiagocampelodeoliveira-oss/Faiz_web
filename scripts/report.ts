@@ -62,6 +62,8 @@ const pessoas = states
       // só quantidades, nunca valores
       informouSaldo: !!d.fin?.saldo,
       calendarioDoCelular: !!d.calFeed,
+      rotinaBase: d.entrevista?.fim ? 'terminou' : d.entrevista?.on || d.entrevista?.pausa ? 'começou' : d.entrevistaNao ? 'recusou' : 'não começou',
+      rotinasMudadas: st.routineEdits || 0,
       gastosNoCredito: (d.fin?.mov ?? []).filter((x: any) => x?.forma === 'credito').length,
       faturasPagas: (d.fin?.faturas ?? []).length,
       contasSemanaisOuAnuais: (d.fin?.fixas ?? []).filter((x: any) => x?.freq === 'semanal' || x?.freq === 'anual').length,
