@@ -33,33 +33,45 @@ const fin = L.applyFin(L.emptyFin(), [
   { type: 'mov', mov: { tipo: 'saida', valor: 98000, cat: 'mercado', desc: 'Mercado do mês', data: hoje } },
   { type: 'limite', valor: 120000 },
 ]).fin;
-// Conversas sobre dinheiro: cada lista é uma conversa (a frase seguinte vê as anteriores e o caderno atualizado, como no app).
-const conversas: string[][] = [
-  ['quero botar um boleto de dezembro, vou pagar dia 9 de dezembro'],
-  ['tenho um boleto de 350 reais pra pagar dia 9 de dezembro'],
-  ['me lembra de pagar o boleto da faculdade dia 9 de dezembro'],
-  ['boleto de 120 vence 09/12'],
-  ['quero botar um boleto de dezembro', 'dia 9 de dezembro'],
+// Rotinas: cada lista é uma conversa. "ent" = a Íris está na entrevista da rotina (assunto e a pergunta que ela fez).
+type Passo = { frase: string; ent?: { topico: string; pergunta: string } };
+const trabTodoDia = { id: 'rtk', title: 'Trabalho', dias: [0, 1, 2, 3, 4, 5, 6], start: 480, end: 1020, category: 'trabalho', color: 'blue', since: L.addDays(hoje, -3), createdAt: 0 };
+const trabSemana = { ...trabTodoDia, id: 'rts', dias: [1, 2, 3, 4, 5] };
+const P = (frase: string, ent?: Passo['ent']): Passo => ({ frase, ent });
+const conversas: { rot: any[]; passos: Passo[] }[] = [
+  { rot: [trabTodoDia], passos: [P('meu trabalho na verdade é só de segunda a sexta')] },
+  { rot: [trabTodoDia], passos: [P('muda o trabalho pra seg a sex, fim de semana eu folgo')] },
+  { rot: [], passos: [P('trabalho de segunda a sexta no período da tarde'), P('das 13 às 18')] },
+  { rot: [], passos: [P('trabalho de seg a sex das 8 às 17 e sábado das 8 ao meio dia', { topico: 'trabalho', pergunta: 'Primeiro o trabalho: você trabalha ou faz estágio? Me fala os dias e de que horas até que horas.' })] },
+  { rot: [], passos: [P('faço faculdade à noite', { topico: 'estudos', pergunta: 'E os estudos? Escola, faculdade, cursinho, algum curso... Quais dias e horários?' })] },
+  { rot: [trabSemana], passos: [P('Quero começar', { topico: 'exercício', pergunta: 'Agora o corpo 💪 Academia, esporte, corrida... tem algo fixo? Que dias e que horas?' })] },
+  { rot: [trabTodoDia], passos: [P('não, é só de segunda a sexta', { topico: 'trabalho', pergunta: 'Vi que você já tem Trabalho: todo dia, 08:00–17:00. Tá certo assim?' })] },
+  { rot: [trabSemana], passos: [P('Não estudo agora', { topico: 'estudos', pergunta: 'E os estudos? Escola, faculdade, cursinho, algum curso... Quais dias e horários?' })] },
+  { rot: [trabSemana], passos: [P('marca academia amanhã e mercado depois do trabalho')] },
 ];
-let caderno = fin;
 for (const conv of conversas) {
   const linhas: string[] = [];
   const recent: { who: 'me' | 'bot'; text: string }[] = [];
-  for (const frase of conv) {
-    const ctx = { now: new Date(), tasks, fin: caderno };
-    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, recent, { nome: 'Tiago' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
+  let routines = conv.rot.slice();
+  let ts = L.materialize([], routines, hoje).tasks;
+  for (const { frase, ent } of conv.passos) {
+    if (ent) recent.push({ who: 'bot', text: ent.pergunta });
+    const ctx = { now: new Date(), tasks: ts, fin, routines, entrevista: ent };
+    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, recent, { nome: 'Kauã' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
     const body: any = await r.json().catch(() => ({}));
     let texto = '';
     try {
       const t = String(body.text || '');
       const cmd = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1));
       const rep = L.aiToReply(cmd, frase, ctx);
-      if (rep.fin?.length) caderno = L.applyFin(caderno, rep.fin).fin;
-      const cx = L.caixa(caderno, L.dateKey(new Date()));
-      const tipos = (cmd.acao === 'varios' ? (cmd.comandos || []) : [cmd]).map((c: any) => c.financa?.tipo || c.acao).join('+');
-      texto = `[${tipos}] {${JSON.stringify(cmd).slice(0, 260)}} ${rep.text} ${rep.fin ? `[caderno: ${rep.fin.map((o: any) => o.type).join(',')}]` : ''} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} ${rep.plan ? `[plano: ${JSON.stringify(rep.plan).slice(0, 200)}]` : ''} {saldo ${cx.saldo == null ? '-' : cx.saldo / 100} · comprometido ${cx.comprometido / 100} · disponível ${cx.disponivel == null ? '-' : cx.disponivel / 100}}`;
+      // confirma tudo, como se a pessoa tocasse em Confirmar
+      for (const sp of rep.routines || []) { const nr = { id: L.newId('r'), ...sp, since: hoje, createdAt: 0 }; routines = [...routines, nr]; ts = L.materialize(ts, [nr], hoje).tasks; }
+      for (const e of rep.routineEdits || []) { if (e.remove) { const x = L.removeRoutine(ts, routines, e.id, hoje); ts = x.tasks; routines = x.routines; } else { const x = L.updateRoutine(ts, routines, e.id, e, hoje); ts = x.tasks; routines = x.routines; } }
+      if (rep.ops?.length) ts = L.applyOps(ts, rep.ops).tasks ?? ts;
+      const tipos = (cmd.acao === 'varios' ? (cmd.comandos || []) : [cmd]).map((c: any) => c.acao).join('+');
+      texto = `[${tipos}] ${rep.text} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} ${rep.plan ? `[plano: ${rep.plan.filter((x: any) => x.isNew).map((x: any) => `${x.title} ${L.fmtTime(x.start)}`).join(', ')}]` : ''} ${rep.entrevista ? `[entrevista: ${rep.entrevista}]` : ''} {rotinas: ${routines.map((x: any) => `${x.title} ${L.diasLabel(x.dias)} ${L.timeRange(x.start, x.end)}`).join('; ') || '-'}}`;
       recent.push({ who: 'me', text: frase }, { who: 'bot', text: rep.text });
-    } catch (e) { texto = `(resposta fora do formato) ${String(body.text || JSON.stringify(body)).slice(0, 160)}`; }
+    } catch (e) { texto = `(resposta fora do formato) ${String(e)} ${String(body.text || JSON.stringify(body)).slice(0, 160)}`; }
     linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
   }
   console.log(`::warning::ÍRIS: ${linhas.join(' ‖ ')}`);
