@@ -51,6 +51,14 @@ for (const x of ai) { const d = new Date(Date.parse(x.at) - 3 * 3600e3).toISOStr
 const reqs = (await get('states?select=data->stats->>requests')).reduce((a: number, x: any) => a + (+x.requests || 0), 0);
 console.log(`::warning::IA USO: ${[...porDia].map(([d, o]) => `${d}: ${o.n} chamadas (${o.ok} ok, ${o.sonnet} Sonnet), ${o.out} tokens de saída`).join(' ‖ ')} ‖ total ${ai.length} chamadas registradas; pedidos somados de todos desde o início: ${reqs}`);
 
+// Planos da Íris esperando "Confirmar" (só contagens e datas, nunca o texto).
+const pend = ga.filter((x) => (x.data?.chat || []).some((m: any) => m?.proposal)).map((x) => {
+  const ps = (x.data.chat || []).filter((m: any) => m?.proposal);
+  const p = ps.filter((m: any) => m.proposal.status === 'pending');
+  return `${String(x.data.name || '?').split(' ')[0]}: ${ps.length} planos, ${p.length} sem confirmar${p.length ? ` (último ${new Date(Math.max(...p.map((m: any) => m.at || m.ts || 0))).toISOString().slice(0, 16)})` : ''} · perguntar antes: ${x.data.settings?.askBefore !== false ? 'sim' : 'não'}`;
+});
+console.log(`::warning::CONFIRMAR: ${pend.join(' ‖ ')}`);
+
 // Login com Google ligado?
 const anon = keys.find((k) => k.name === 'anon' || k.type === 'publishable')!.api_key;
 const conf: any = await (await fetch(`https://${REF}.supabase.co/auth/v1/settings`, { headers: { apikey: anon } })).json();
