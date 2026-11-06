@@ -39,15 +39,12 @@ const trabTodoDia = { id: 'rtk', title: 'Trabalho', dias: [0, 1, 2, 3, 4, 5, 6],
 const trabSemana = { ...trabTodoDia, id: 'rts', dias: [1, 2, 3, 4, 5] };
 const P = (frase: string, ent?: Passo['ent']): Passo => ({ frase, ent });
 const conversas: { rot: any[]; passos: Passo[] }[] = [
-  { rot: [trabTodoDia], passos: [P('meu trabalho na verdade é só de segunda a sexta')] },
-  { rot: [trabTodoDia], passos: [P('muda o trabalho pra seg a sex, fim de semana eu folgo')] },
-  { rot: [], passos: [P('trabalho de segunda a sexta no período da tarde'), P('das 13 às 18')] },
-  { rot: [], passos: [P('trabalho de seg a sex das 8 às 17 e sábado das 8 ao meio dia', { topico: 'trabalho', pergunta: 'Primeiro o trabalho: você trabalha ou faz estágio? Me fala os dias e de que horas até que horas.' })] },
-  { rot: [], passos: [P('faço faculdade à noite', { topico: 'estudos', pergunta: 'E os estudos? Escola, faculdade, cursinho, algum curso... Quais dias e horários?' })] },
-  { rot: [trabSemana], passos: [P('Quero começar', { topico: 'exercício', pergunta: 'Agora o corpo 💪 Academia, esporte, corrida... tem algo fixo? Que dias e que horas?' })] },
-  { rot: [trabTodoDia], passos: [P('não, é só de segunda a sexta', { topico: 'trabalho', pergunta: 'Vi que você já tem Trabalho: todo dia, 08:00–17:00. Tá certo assim?' })] },
-  { rot: [trabSemana], passos: [P('Não estudo agora', { topico: 'estudos', pergunta: 'E os estudos? Escola, faculdade, cursinho, algum curso... Quais dias e horários?' })] },
-  { rot: [trabSemana], passos: [P('marca academia amanhã e mercado depois do trabalho')] },
+  { rot: [], passos: [P('faculdade de segunda a sexta de 8h as 11h40', { topico: 'estudos', pergunta: 'E os estudos? Escola, faculdade, curso, idioma, estudar por conta... Me conta o que é, os dias e os horários.' })] },
+  { rot: [], passos: [P('minha faculdade é de 8h às 11h40, de segunda a sexta')] },
+  { rot: [], passos: [P('faço faculdade', { topico: 'estudos', pergunta: 'E os estudos? Escola, faculdade, curso, idioma, estudar por conta... Me conta o que é, os dias e os horários.' }), P('seg a qui das 7 às 10:40')] },
+  { rot: [], passos: [P('faço faculdade à noite', { topico: 'estudos', pergunta: 'E os estudos? Escola, faculdade, curso, idioma, estudar por conta... Me conta o que é, os dias e os horários.' }), P('seg a qui das 7 às 10:40')] },
+  { rot: [], passos: [P('academia todo dia às 6h')] },
+  { rot: [], passos: [P('inglês terça e quinta das 10 às 11')] },
 ];
 for (const conv of conversas) {
   const linhas: string[] = [];
@@ -56,7 +53,7 @@ for (const conv of conversas) {
   let ts = L.materialize([], routines, hoje).tasks;
   for (const { frase, ent } of conv.passos) {
     if (ent) recent.push({ who: 'bot', text: ent.pergunta });
-    const ctx = { now: new Date(), tasks: ts, fin, routines, entrevista: ent };
+    const ctx = { now: new Date(), tasks: ts, fin, routines, entrevista: ent, recentUser: recent.filter((m) => m.who === 'me').map((m) => m.text).join(' ') };
     const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, recent, { nome: 'Kauã' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
     const body: any = await r.json().catch(() => ({}));
     let texto = '';
