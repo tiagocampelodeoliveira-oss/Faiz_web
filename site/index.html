@@ -404,7 +404,7 @@ Regras:
 - Cobran\xE7a pelo que a pessoa deixou de fazer: s\xF3 quando o pedido tem a ver com essa atividade (ex.: ela pede corrida e vem furando a corrida) ou quando ela mesma est\xE1 enrolando. Em pedidos sem rela\xE7\xE3o (achar um lugar, uma d\xFAvida, um desabafo), n\xE3o cobre.
 - T\xEDtulos curtos e com inicial mai\xFAscula ("Jantar com Ana", "Academia"). Datas relativas ("quinta", "amanh\xE3", "dia 5") viram AAAA-MM-DD a partir de hoje; um dia da semana sem "que vem" \xE9 o pr\xF3ximo a partir de hoje (hoje mesmo, se for hoje).
 - Sem dia dito: null.
-- Hor\xE1rios no rel\xF3gio de 24 horas: o dia come\xE7a em 00:00 (meia-noite) e termina em 23:59; "meio-dia" = 12:00, "meia-noite" = 00:00. N\xFAmero de 13 a 23 ("20h", "18:30") j\xE1 \xE9 tarde/noite. Hora solta de 1 a 11 ("5h", "\xE0s 8", "11h40") \xE9 de MANH\xC3 por padr\xE3o (05:00, 08:00, 11:40). S\xF3 passe para tarde/noite (some 12) quando o contexto deixar claro: a pessoa disse "da tarde", "da noite", "\xE0 noite", ou a atividade s\xF3 acontece nesse hor\xE1rio (jantar, happy hour, balada, festa, show, "depois do trabalho", "antes de dormir", almo\xE7o \xE0s 1 = 13:00), inclusive se ela disse isso nas mensagens anteriores. N\xE3o deduza pelo tipo de atividade quando ela pode acontecer de manh\xE3 (faculdade, academia, trabalho, aula, reuni\xE3o). Se mesmo com o contexto n\xE3o der para saber ("reuni\xE3o \xE0s 2", "trabalho das 3 \xE0s 9"), use "perguntar": "\xC0s 2 da tarde ou da madrugada?", com "sugestoes" ("2h da tarde", "2h da madrugada"). Quando a pessoa responder, use a hora certa e fa\xE7a o pedido original completo (est\xE1 na conversa recente).`,p=`${Ca(o.nome)}
+- Hor\xE1rios no rel\xF3gio de 24 horas: o dia come\xE7a em 00:00 (meia-noite) e termina em 23:59; "meio-dia" = 12:00, "meia-noite" = 00:00. N\xFAmero de 13 a 23 ("20h", "18:30") j\xE1 \xE9 tarde/noite. Hora solta de 1 a 11 ("5h", "\xE0s 8", "11h40") \xE9 de MANH\xC3 por padr\xE3o (05:00, 08:00, 11:40). S\xF3 passe para tarde/noite (some 12) quando o contexto deixar claro: a pessoa disse "da tarde", "da noite", "\xE0 noite", ou a atividade s\xF3 acontece nesse hor\xE1rio (jantar, happy hour, balada, festa, show, "depois do trabalho", "antes de dormir", "saio do trabalho \xE0s 6" = 18:00, almo\xE7o \xE0s 1 = 13:00; e use a agenda e as rotinas: se o trabalho vai at\xE9 17:00, "saio \xE0s 6" \xE9 18:00), inclusive se ela disse isso nas mensagens anteriores. N\xE3o deduza pelo tipo de atividade quando ela pode acontecer de manh\xE3 (faculdade, academia, trabalho, aula, reuni\xE3o). Se mesmo com o contexto n\xE3o der para saber ("reuni\xE3o \xE0s 2", "trabalho das 3 \xE0s 9"), use "perguntar": "\xC0s 2 da tarde ou da madrugada?", com "sugestoes" ("2h da tarde", "2h da madrugada"). Quando a pessoa responder, use a hora certa e fa\xE7a o pedido original completo (est\xE1 na conversa recente).`,p=`${Ca(o.nome)}
 
 Hoje \xE9 ${ae(t)}, ${t}. Agora s\xE3o ${w(oe(a.now))}.
 
@@ -462,7 +462,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-06 13:34';
+const APP_VERSION = '2026-11-06 13:36';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');

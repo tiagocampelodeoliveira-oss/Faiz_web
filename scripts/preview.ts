@@ -39,15 +39,9 @@ const trabTodoDia = { id: 'rtk', title: 'Trabalho', dias: [0, 1, 2, 3, 4, 5, 6],
 const trabSemana = { ...trabTodoDia, id: 'rts', dias: [1, 2, 3, 4, 5] };
 const P = (frase: string, ent?: Passo['ent']): Passo => ({ frase, ent });
 const conversas: { rot: any[]; passos: Passo[] }[] = [
-  { rot: [], passos: [P('jantar com a Ana sexta às 8')] },
-  { rot: [], passos: [P('academia amanhã às 6')] },
-  { rot: [], passos: [P('reunião amanhã às 2'), P('2h da tarde')] },
-  { rot: [], passos: [P('trabalho seg a sex das 8 às 5')] },
-  { rot: [], passos: [P('faculdade de segunda a sexta de 8h as 11h40')] },
   { rot: [trabSemana], passos: [P('amanhã saio do trabalho às 6, marca academia depois')] },
-  { rot: [], passos: [P('acordo às 5h todo dia pra correr')] },
-  { rot: [], passos: [P('tomar remédio todo dia à meia-noite')] },
-  { rot: [], passos: [P('trabalho de 1 às 5 de segunda a sexta')] },
+  { rot: [], passos: [P('trabalho de 1 às 5 de segunda a sexta'), P('13h às 17h')] },
+  { rot: [], passos: [P('faculdade de segunda a sexta de 8h as 11h40')] },
 ];
 for (const conv of conversas) {
   const linhas: string[] = [];
