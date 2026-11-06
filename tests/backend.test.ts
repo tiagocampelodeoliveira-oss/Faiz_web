@@ -333,3 +333,25 @@ test('avisos de conta: semanal só no dia; anual só no mês dela; não repete o
   const luz = { id: 'l', tipo: 'conta', nome: 'Luz', valor: 18000, dia: 20, desde: '2026-10' };
   assert.deepEqual(dueNotices(st([luz]), at('2026-11-18', '10:00'), new Set()).filter((n) => n.tag === 'c-l').map((n) => n.key), ['c:l:2026-11:pre'], 'mensal continua igual');
 });
+
+test('compromisso do Google Agenda: só um aviso antes; nunca cobra, nunca conta furo, fora da revisão da noite', () => {
+  const g = (id: string, date: string, start: number, extra: any = {}) => ({ id, title: 'Aula 3º ano', date, start, end: start + 50, source: 'google', status: 'pendente', ...extra });
+  // 5 dias de aula do Google sem "feito" + uma tarefa do Faiz
+  const tasks: any[] = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05'].map((d, i) => g('g' + i, d, 8 * 60));
+  tasks.push(g('ghoje', '2026-11-06', 8 * 60), { id: 'f1', title: 'Corrigir provas', date: '2026-11-06', start: 19 * 60, end: 20 * 60, status: 'feito' });
+  const st = { name: 'Leo', settings: { tz: SP }, tasks } as any;
+  const em = (h: string) => dueNotices(st, at('2026-11-06', h), new Set()).filter((n) => n.tag === 't-ghoje');
+  const antes = em('07:52');
+  assert.equal(antes.length, 1);
+  assert.match(antes[0].title, /^Aula 3º ano em 8 min 📅$/);
+  assert.doesNotMatch(antes[0].body, /furando|sacanagem|sequência/i);
+  assert.equal(em('08:05').length, 0, 'na hora não cobra');
+  assert.equal(em('08:52').length, 0, 'no fim não pergunta');
+  assert.equal(em('07:05').length, 0, 'sem aviso de 1 hora antes');
+  assert.equal(missedStreak(tasks, 'Aula 3º ano', '2026-11-06'), 0, 'não conta furo');
+  const noite = dueNotices(st, at('2026-11-06', '21:10'), new Set()).filter((n) => n.tag === 'noite');
+  assert.equal(noite.length, 1);
+  assert.match(noite[0].body, /fez tudo hoje \(1 de 1\)/, 'revisão só olha as tarefas do Faiz');
+  const vesp = dueNotices({ ...st, tasks: [g('gam', '2026-11-07', 7 * 60)] }, at('2026-11-06', '20:10'), new Set()).filter((n) => n.tag === 'vespera');
+  assert.equal(vesp.length, 0, 'véspera não repete a aula do Google');
+});

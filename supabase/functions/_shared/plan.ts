@@ -2,6 +2,8 @@
 // Função pura: roda no servidor (Deno) e nos testes (Node). Sem dependências.
 
 export type Task = {
+  /** 'google' = compromisso que veio do Google Agenda (só leitura): avisa antes, nunca cobra. */
+  source?: string;
   id: string;
   title: string;
   date: string; // AAAA-MM-DD, horário local da pessoa
@@ -66,6 +68,8 @@ const pick = (id: string) => { let h = 0; for (const c of id) h = (h * 31 + c.ch
 
 /** Dia anterior (AAAA-MM-DD) n dias antes. */
 const daysBefore = (date: string, n: number) => new Date(Date.parse(date + 'T12:00:00Z') - n * 864e5).toISOString().slice(0, 10);
+/** Compromisso do Google Agenda (não é tarefa do Faiz: não conta furo nem cobra). */
+const isGoogle = (t: Task) => t?.source === 'google';
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 /**
  * Quantas vezes seguidas (as últimas, antes de hoje) a pessoa deixou de fazer esta atividade.
@@ -74,7 +78,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
 export function missedStreak(tasks: Task[], title: string, date: string): number {
   const n = norm(title);
   const byDay = new Map<string, boolean>();
-  for (const t of tasks) if (t && t.date < date && t.date >= daysBefore(date, 30) && norm(t.title) === n) byDay.set(t.date, (byDay.get(t.date) ?? false) || t.status === 'feito');
+  for (const t of tasks) if (t && !isGoogle(t) && t.date < date && t.date >= daysBefore(date, 30) && norm(t.title) === n) byDay.set(t.date, (byDay.get(t.date) ?? false) || t.status === 'feito');
   let k = 0;
   for (const d of [...byDay.keys()].sort().reverse()) { if (byDay.get(d)) break; k++; }
   return k;
@@ -84,7 +88,7 @@ export function missedStreak(tasks: Task[], title: string, date: string): number
 export function doneStreak(tasks: Task[], title: string, date: string): number {
   const n = norm(title);
   const byDay = new Map<string, boolean>();
-  for (const t of tasks) if (t && t.date <= date && norm(t.title) === n) byDay.set(t.date, (byDay.get(t.date) ?? false) || t.status === 'feito');
+  for (const t of tasks) if (t && !isGoogle(t) && t.date <= date && norm(t.title) === n) byDay.set(t.date, (byDay.get(t.date) ?? false) || t.status === 'feito');
   let k = 0, last = date;
   for (const d of [...byDay.keys()].sort().reverse()) {
     if ((Date.parse(last) - Date.parse(d)) / 864e5 > 8) break;
@@ -185,6 +189,11 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const url = `./?t=${encodeURIComponent(t.id)}`, tag = `t-${t.id}`;
     const base = `t:${t.id}:${t.date}:${t.start}`;
     const dur = t.end != null && t.end > t.start ? t.end - t.start : 0;
+    if (isGoogle(t)) { // compromisso do Google Agenda: só um aviso antes, sem cobrar
+      if (min >= t.start - lead && min < t.start)
+        add({ key: `${base}:${lead}`, title: `${t.title} em ${t.start - min} min 📅`, body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''}`, url, tag });
+      continue;
+    }
     if (isReminder) {
       if (min >= t.start && min < t.start + 30)
         add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: IRIS.lembrete.at(v)!, url, tag });
@@ -218,7 +227,7 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   // 1b. Véspera, às 20:00: o que começa cedo amanhã (antes das 10h).
   const tomorrow = daysBefore(date, -1);
   if (on('vespera') && min >= 20 * 60 && min < 21 * 60) {
-    const cedo = all.filter((t) => t && t.date === tomorrow && t.status !== 'feito' && t.start != null && t.start < 600 && t.tag !== 'Lembrete').sort(byTime);
+    const cedo = all.filter((t) => t && !isGoogle(t) && t.date === tomorrow && t.status !== 'feito' && t.start != null && t.start < 600 && t.tag !== 'Lembrete').sort(byTime);
     if (cedo.length) {
       const v = pick(tomorrow);
       const lista = joinPt(cedo.slice(0, 3).map((t) => `${lcFirst(t.title)} às ${fmt(t.start!)}`));
@@ -244,13 +253,14 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
 
   // 3. Revisão da noite (padrão 21:00): só se houve algo no dia.
   const night = ns.night === null ? null : hhmm(ns.night ?? '21:00');
-  if (night != null && min >= night && min < night + 60 && today.length) {
-    const done = today.length - open.length;
-    const pend = open.map((t) => lcFirst(t.title));
+  const minhas = today.filter((t) => !isGoogle(t)), minhasAbertas = open.filter((t) => !isGoogle(t));
+  if (night != null && min >= night && min < night + 60 && minhas.length) {
+    const done = minhas.length - minhasAbertas.length;
+    const pend = minhasAbertas.map((t) => lcFirst(t.title));
     const lista = `${joinPt(pend.slice(0, 3))}${pend.length > 3 ? ` e mais ${pend.length - 3}` : ''}`;
     let title: string, body: string;
-    if (!pend.length) { title = 'Arrasou! 🎉'; body = `Você fez tudo hoje (${done} de ${today.length}). Orgulho!`; }
-    else { title = 'Hora da verdade 😤'; body = done ? `${done} de ${today.length}. Ficou pra trás: ${lista}. Amanhã sem desculpa, combinado?` : `Zero de ${today.length} hoje? Ficou tudo pra trás: ${lista}. Amanhã a gente recupera, sem desculpa!`; }
+    if (!pend.length) { title = 'Arrasou! 🎉'; body = `Você fez tudo hoje (${done} de ${minhas.length}). Orgulho!`; }
+    else { title = 'Hora da verdade 😤'; body = done ? `${done} de ${minhas.length}. Ficou pra trás: ${lista}. Amanhã sem desculpa, combinado?` : `Zero de ${minhas.length} hoje? Ficou tudo pra trás: ${lista}. Amanhã a gente recupera, sem desculpa!`; }
     add({ key: `n:${date}`, title, body, url: './?v=noite', tag: 'noite' });
   }
   // 4. Pesquisa do teste: no 3º e no 7º dia de uso, às 19:00, se ainda não respondeu.
