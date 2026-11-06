@@ -179,6 +179,7 @@ button{cursor:pointer}
 .opt[aria-pressed=true]{border-color:var(--blue);background:var(--blue-soft);color:var(--blue-ink);font-weight:600}
 .qr{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 0 42px}
 .qr button{border:1.5px solid var(--blue);background:var(--surface);color:var(--blue-ink);border-radius:999px;padding:8px 13px;font-size:14px;font-weight:600;text-align:left}
+.qr button.outra{border-style:dashed;color:var(--muted, #5b6170);font-weight:500}
 /* vídeo de apresentação */
 .tour{position:fixed;inset:0;z-index:60;background:rgba(12,22,40,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:calc(14px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px))}
 .tour video{max-height:calc(100dvh - 150px);max-width:100%;aspect-ratio:390/844;border-radius:26px;background:#E8E7FC;box-shadow:0 20px 50px -20px rgba(0,0,0,.7)}
@@ -397,7 +398,7 @@ Regras:
   - mercado ou compras: montar a lista; jantar ou encontro: reservar, combinar hor\xE1rio;
   - dinheiro: definir um limite, anotar as contas fixas, ver para onde o dinheiro est\xE1 indo.
   Para montar algo maior (treino da semana, cronograma de estudo), pergunte antes o essencial (quantos dias, objetivo, hor\xE1rio) com "perguntar" + "sugestoes"; com a resposta, crie tudo de uma vez em "rotina". N\xE3o ofere\xE7a o que a pessoa j\xE1 recusou na conversa recente, n\xE3o repita uma pergunta que voc\xEA j\xE1 fez nas \xFAltimas mensagens, e n\xE3o ofere\xE7a nada quando ela estiver mal ou s\xF3 desabafando.
-- "sugestoes": textos curtos (at\xE9 5 palavras), escritos como a PESSOA falaria ao responder ("Montar treino da semana", "3 dias: seg, qua e sex"). Nunca ponha valores em dinheiro que a pessoa n\xE3o disse. Sem sugest\xF5es quando n\xE3o houver pr\xF3ximo passo \xFAtil: null.
+- "sugestoes": textos curtos (at\xE9 5 palavras), escritos como a PESSOA falaria ao responder ("Montar treino da semana", "3 dias: seg, qua e sex"). Nunca ponha valores em dinheiro que a pessoa n\xE3o disse. Sem sugest\xF5es quando n\xE3o houver pr\xF3ximo passo \xFAtil: null. Os bot\xF5es s\xE3o s\xF3 atalhos: o app sempre mostra "Outra resposta" para a pessoa escrever do jeito dela. N\xE3o trate as op\xE7\xF5es como as \xFAnicas poss\xEDveis e entenda qualquer resposta escrita.
 - "fala" (em todas as a\xE7\xF5es, menos "conversa" e "perguntar", que usam "resposta"): 1 ou 2 frases curtas da \xCDris comentando o pedido, no jeito dela. N\xC3O cite hor\xE1rios nem datas na "fala" (o app mostra o plano com os hor\xE1rios). A "fala" vem ANTES de a pessoa confirmar: diga o que vai fazer ("vou tirar a academia", "montei assim"), nunca que j\xE1 fez ("cancelei", "coloquei").
 - Sequ\xEAncias: se a pessoa est\xE1 numa sequ\xEAncia de uma atividade do pedido, comemore e use para motivar ("s\xE3o 5 seguidas, n\xE3o vai quebrar agora, n\xE9?").
 - Cobran\xE7a pelo que a pessoa deixou de fazer: s\xF3 quando o pedido tem a ver com essa atividade (ex.: ela pede corrida e vem furando a corrida) ou quando ela mesma est\xE1 enrolando. Em pedidos sem rela\xE7\xE3o (achar um lugar, uma d\xFAvida, um desabafo), n\xE3o cobre.
@@ -460,7 +461,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-06 12:43';
+const APP_VERSION = '2026-11-06 13:09';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -1612,10 +1613,10 @@ function applyProposal(ops, doneText, date, plan, notes) {
 }
 /* ---------- Entrevista da rotina: a Íris conhece a semana fixa da pessoa antes das coisas que variam ---------- */
 const ENTREVISTA = [
-  { k: 'trabalho', re: /trabalh|estagi|servico|emprego|expediente|plantao|turno/, q: 'Primeiro o trabalho: você trabalha ou faz estágio? Me fala os dias e de que horas até que horas.', sugs: ['Seg a sex, 8h às 17h', 'Não trabalho', 'Cada dia é diferente'] },
-  { k: 'estudos', re: /estud|aula|facul|escola|colegio|curso|cursinho/, q: 'E os estudos? Escola, faculdade, cursinho, algum curso... Quais dias e horários?', sugs: ['Faculdade à noite', 'Não estudo agora', 'Curso no sábado'] },
-  { k: 'exercício', re: /academia|treino|corr|futebol|futsal|volei|basquete|esporte|natac|nadar|yoga|pilates|luta|jiu|muay|boxe|crossfit|bike|pedal|caminh|danca/, q: 'Agora o corpo 💪 Academia, esporte, corrida... tem algo fixo? Que dias e que horas?', sugs: ['Academia seg, qua e sex', 'Não faço nada ainda', 'Quero começar'] },
-  { k: 'outras coisas fixas', re: null, q: 'Mais alguma coisa fixa toda semana? Igreja, terapia, inglês, levar alguém na escola...', sugs: ['Não, é só isso', 'Tenho sim'] },
+  { k: 'trabalho', re: /trabalh|estagi|servico|emprego|expediente|plantao|turno/, q: 'Primeiro o trabalho: você trabalha ou faz estágio? Me conta do seu jeito: quais dias e de que horas até que horas.', sugs: ['Não trabalho', 'Cada dia é diferente'], dica: 'Ex.: seg a sex das 9h às 18h, sábado até 13h' },
+  { k: 'estudos', re: /estud|aula|facul|escola|colegio|curso|cursinho/, q: 'E os estudos? Escola, faculdade, curso, idioma, estudar por conta... Me conta o que é, os dias e os horários.', sugs: ['Não estudo agora', 'Cada dia é diferente'], dica: 'Ex.: inglês ter e qui das 19h às 20h' },
+  { k: 'exercício', re: /academia|treino|corr|futebol|futsal|volei|basquete|esporte|natac|nadar|yoga|pilates|luta|jiu|muay|boxe|crossfit|bike|pedal|caminh|danca/, q: 'Agora o corpo 💪 Academia, esporte, corrida, dança... tem algo fixo? Me fala o que é, os dias e o horário.', sugs: ['Não faço nada ainda', 'Quero começar'], dica: 'Ex.: futebol quarta às 20h e academia seg e sex de manhã' },
+  { k: 'outras coisas fixas', re: null, q: 'Mais alguma coisa fixa toda semana? Igreja, terapia, levar alguém na escola, um bico... Pode contar tudo.', sugs: ['Não, é só isso'], dica: 'Ex.: igreja domingo às 10h' },
 ];
 function entrevistaCtx() { const e = S.entrevista; return e?.on && e.pergunta ? { topico: ENTREVISTA[e.etapa]?.k || 'rotina', pergunta: e.pergunta } : undefined; }
 function rotinaTxt(r) { return `${r.title}: ${L.diasLabel(r.dias).toLowerCase()}${r.start != null ? `, ${L.timeRange(r.start, r.end)}` : ''}`; }
@@ -1633,7 +1634,7 @@ function entrevistaAsk() {
   const tem = t.re ? S.routines.filter((r) => t.re.test(L.norm(r.title))) : [];
   e.pergunta = tem.length ? `Vi que você já tem ${tem.map(rotinaTxt).join('; ')}. Tá certo assim?` : t.q;
   save();
-  push({ who: 'bot', mood: 'principal', text: e.pergunta, sugs: tem.length ? ['Tá certo', 'Mudou os dias', 'Mudou o horário'] : t.sugs });
+  push({ who: 'bot', mood: 'principal', text: e.pergunta, sugs: tem.length ? ['Tá certo'] : t.sugs, dica: tem.length ? 'Ex.: é só de seg a sex, das 13h às 18h' : t.dica });
 }
 function entrevistaNext() { const e = S.entrevista; if (!e?.on) return; e.etapa++; S.stats.entrevista.etapas = Math.max(S.stats.entrevista.etapas || 0, e.etapa); entrevistaAsk(); }
 function entrevistaPausa() { if (S.entrevista) { S.entrevista.on = false; S.entrevista.pausa = true; save(); } }
@@ -2310,16 +2311,19 @@ const screens = {
       const pending = m.proposal?.status === 'pending';
       const undoable = m.undo && !m.undo.done;
       const acts = [];
-      if (pending) acts.push(`<button class="pill navy" type="button" data-act="confirm" data-id="${m.id}">Confirmar</button>`, `<button class="pill" type="button" data-act="adjust" data-id="${m.id}">Ajustar</button>`);
+      if (pending) acts.push(`<button class="pill navy" type="button" data-act="confirm" data-id="${m.id}">Confirmar</button>`, m.proposal.routines?.length ? `<button class="pill" type="button" data-act="propedit" data-id="${m.id}">✏️ Editar</button>` : '', `<button class="pill" type="button" data-act="adjust" data-id="${m.id}">Ajustar</button>`);
       const rp = undoable ? remindPill(m) : '';
       if (rp) acts.push(rp);
+      if (undoable && (m.undo.routines?.length || m.undo.routinesPrev?.length)) acts.push('<button class="pill" type="button" data-act="tab" data-v="tarefas">Ver rotinas</button>');
       if (undoable && m.date) acts.push(`<button class="pill" type="button" data-act="day" data-v="${m.date}">Ver na agenda</button>`);
       if (undoable) acts.push(`<button class="pill" type="button" data-act="undo" data-id="${m.id}">Desfazer</button>`);
       (m.links || []).filter((l) => l.ext).forEach((l) => acts.push(`<a class="pill navy" href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`));
       (m.links || []).filter((l) => l.act).forEach((l) => acts.push(`<button class="pill navy" type="button" data-act="${esc(l.act)}" ${l.v ? `data-v="${esc(l.v)}"` : ''}>${esc(l.label)}</button>`));
       (m.links || []).filter((l) => !l.ext && !l.act).forEach((l) => acts.push(`<button class="pill" type="button" data-act="${l.href.startsWith('agenda:') ? 'day' : 'tab'}" data-v="${esc(l.href.startsWith('agenda:') ? l.href.slice(7) : l.href === '/' ? 'hoje' : l.href === 'contas' ? 'contas' : 'agenda')}">${esc(l.label)}</button>`));
       const last = S.chat[S.chat.length - 1] === m && !U.typing;
-      const qr = last && m.sugs?.length ? `<div class="qr">${m.sugs.map((q) => `<button type="button" data-act="say" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>` : '';
+      // pergunta da Íris: os botões são só atalhos; "Outra resposta" deixa a pessoa contar do jeito dela
+      const outra = m.dica || /\?\s*$/.test(m.text || '');
+      const qr = last && m.sugs?.length ? `<div class="qr">${m.sugs.map((q) => `<button type="button" data-act="say" data-v="${esc(q)}">${esc(q)}</button>`).join('')}${outra ? `<button type="button" class="outra" data-act="outra" data-v="${esc(m.dica || 'Escreva do seu jeito ou toque no microfone')}">✏️ Outra resposta</button>` : ''}</div>` : '';
       return `<div class="botrow">${irisImg(m.mood || 'principal', 34)}<div class="msg bot">${esc(m.text)}${m.plan?.length ? `<div class="plan">${m.plan.map((p) => `<div><b>${L.fmtTime(p.start)}</b><i style="background:${COLORS[p.color] || 'var(--lilac)'}"></i><span>${esc(p.title)}</span>${p.isNew ? '<small>novo</small>' : ''}</div>`).join('')}</div>` : ''}${m.places?.length ? `<div class="places">${m.places.map((p) => `<div class="place"><span class="ico peach" style="width:34px;height:34px;border-radius:11px">${I.pin.replace('<svg', '<svg width="18" height="18"')}</span><div class="txt"><div class="n">${esc(p.nome)}</div><div class="d">${fmtDist(p.dist)}${p.endereco ? ' · ' + esc(p.endereco) : ''}</div></div><a class="pill" href="${esc(routeUrl(p))}" target="_blank" rel="noopener">Como chegar</a></div>`).join('')}</div>` : ''}${m.notes ? `<div class="note">${esc(m.notes)}</div>` : ''}${m.proposal?.status === 'adjusted' ? '<div class="note">Plano não aplicado.</div>' : ''}${acts.length ? `<div class="acts">${acts.join('')}</div>` : ''}</div></div>${qr}`;
     };
     return `<main class="screen bg-peach" style="padding-bottom:0">
@@ -2345,7 +2349,7 @@ const screens = {
     return `<main class="screen bg-lav">
       <div class="head"><span></span><h1 class="screen-title">Tarefas</h1><button class="round" type="button" data-act="newtask" aria-label="Nova tarefa">${I.plus}</button></div>
       <div class="tabs" role="tablist" style="margin-top:14px">${tab('pendentes', 'Pendentes')}${tab('feitas', 'Concluídas')}${tab('todas', 'Todas')}</div>
-      ${S.routines.length && f !== 'feitas' ? `<div class="label">Rotinas</div><div class="card">${S.routines.map((r) => { const k = streakOf(r.title); return `<div class="bill"><span class="em">🔁</span><div class="txt"><div class="n">${esc(r.title)}</div><div class="d">${esc(L.diasLabel(r.dias))}${r.start != null ? ' · ' + L.fmtTime(r.start) : ''}${k >= 2 ? ` · <span class="tag fire" style="margin:0">🔥 ${k} seguidas</span>` : ''}</div></div><button class="del" type="button" data-act="delroutine" data-id="${esc(r.id)}" aria-label="Apagar a rotina ${esc(r.title)}">${I.x}</button></div>`; }).join('')}</div>` : ''}
+      ${S.routines.length && f !== 'feitas' ? `<div class="label">Rotinas</div><div class="card">${S.routines.map((r) => { const k = streakOf(r.title); return `<div class="bill"><span class="em">🔁</span><button class="txt" type="button" data-act="editroutine" data-id="${esc(r.id)}" aria-label="Editar a rotina ${esc(r.title)}" style="text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;flex:1;min-width:0"><div class="n">${esc(r.title)} <span class="meta" style="font-weight:500">✏️</span></div><div class="d">${esc(L.diasLabel(r.dias))}${r.start != null ? ' · ' + L.fmtTime(r.start) : ''}${k >= 2 ? ` · <span class="tag fire" style="margin:0">🔥 ${k} seguidas</span>` : ''}</div></button><button class="del" type="button" data-act="delroutine" data-id="${esc(r.id)}" aria-label="Apagar a rotina ${esc(r.title)}">${I.x}</button></div>`; }).join('')}</div>` : ''}
       ${groups.map(([g, ts]) => ts.length ? `<div class="label" ${g === 'Atrasadas' ? 'style="color:var(--red-ink)"' : ''}>${g}</div><div class="list">${ts.map((t) => taskCard(t, { del: true, showDay: g !== 'Hoje' })).join('')}</div>` : '').join('')}
       ${list.length ? '' : `<p class="muted" style="text-align:center;margin-top:60px">${f === 'feitas' ? 'Nenhuma tarefa concluída ainda.' : 'Nada por aqui.<br>Toque em + para criar uma tarefa, ou peça ao Faiz.'}</p>`}
     </main>`;
@@ -2453,6 +2457,49 @@ function render(keep) {
 }
 
 /* ---------- Folhas ---------- */
+/** Editar uma rotina (ou uma rotina ainda não confirmada): nome, dias, começo e fim. */
+function routineSheet(r, onSave) {
+  let dias = [...(r.dias || [])];
+  const hm = (m) => (m == null ? '' : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+  const ord = [1, 2, 3, 4, 5, 6, 0];
+  sheet(`<h3>Editar rotina</h3>
+    <label class="flabel" for="rtTitle">Nome<input class="field" id="rtTitle" maxlength="60" value="${esc(r.title)}"></label>
+    <div class="flabel">Dias da semana<div class="wd7" id="rtDias">${ord.map((i) => `<button type="button" aria-pressed="${dias.includes(i)}" data-v="${i}" aria-label="${L.WEEKDAYS[i]}">${['D', 'S', 'T', 'Q', 'Q', 'S', 'S'][i]}</button>`).join('')}</div></div>
+    <div class="row" style="gap:10px"><label class="flabel" for="rtIni" style="flex:1">Começa<input class="field" id="rtIni" type="time" value="${hm(r.start)}"></label><label class="flabel" for="rtFim" style="flex:1">Termina<input class="field" id="rtFim" type="time" value="${hm(r.end)}"></label></div>
+    <p class="err" id="rtErr" hidden></p>
+    <div class="row"><button class="btn light" type="button" id="rtCancel" style="flex:1">Cancelar</button><button class="btn" type="button" id="rtSave" style="flex:2">Salvar</button></div>`, (el) => {
+    el.querySelector('#rtDias').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const d = +b.dataset.v; dias = dias.includes(d) ? dias.filter((x) => x !== d) : [...dias, d]; b.setAttribute('aria-pressed', String(dias.includes(d))); });
+    el.querySelector('#rtCancel').onclick = closeSheet;
+    el.querySelector('#rtSave').onclick = () => {
+      const err = (t) => { const er = el.querySelector('#rtErr'); er.hidden = false; er.textContent = t; };
+      const title = el.querySelector('#rtTitle').value.trim();
+      const tm = (id) => { const v = el.querySelector(id).value; return v ? +v.split(':')[0] * 60 + +v.split(':')[1] : undefined; };
+      const start = tm('#rtIni'); let end = tm('#rtFim');
+      if (!title) return err('Escreva o nome da rotina.');
+      if (!dias.length) return err('Escolha pelo menos um dia.');
+      if (start != null && end != null && end <= start) return err('O fim tem que ser depois do começo.');
+      if (start != null && end == null) end = start + (r.start != null && r.end != null ? r.end - r.start : 60);
+      closeSheet();
+      onSave({ title: L.cap(title), dias: dias.slice().sort(), start, end });
+    };
+  });
+}
+/** Plano de rotinas ainda não confirmado: escolher qual editar (ou direto, se for uma só). */
+function propEditSheet(m) {
+  const rs = m.proposal.routines || [];
+  const editar = (i) => routineSheet(rs[i], (spec) => {
+    rs[i] = { ...rs[i], ...spec };
+    const linha = (r) => `• ${r.title}: ${L.diasLabel(r.dias).toLowerCase()}${r.start != null ? ` às ${L.fmtTime(r.start)}${r.end != null ? `–${L.fmtTime(r.end)}` : ''}` : ''}`;
+    const fala = (m.text || '').split('\n').filter((l) => !/^• |^Vou criar/.test(l));
+    m.text = [...fala, rs.length > 1 ? `Vou criar ${rs.length} rotinas:` : 'Vou criar a rotina:', ...rs.map(linha)].join('\n');
+    save(); render(true); toast('Plano atualizado. Confere e confirma 😉');
+  });
+  if (rs.length === 1) return editar(0);
+  sheet(`<h3>Qual você quer editar?</h3><div class="card" style="padding:4px 0">${rs.map((r, i) => `<button class="setrow" type="button" data-i="${i}"><div class="txt"><div class="t">${esc(r.title)}</div><div class="meta">${esc(L.diasLabel(r.dias))}${r.start != null ? ' · ' + L.fmtTime(r.start) : ''}</div></div><span class="pill">✏️</span></button>`).join('')}</div>
+    <p class="muted" style="font-size:13px">Ou me fala no chat o que mudar, do seu jeito: "troca o treino de perna pra quinta".</p>`, (el) => {
+    el.querySelectorAll('[data-i]').forEach((b) => (b.onclick = () => editar(+b.dataset.i)));
+  });
+}
 function newTaskSheet() {
   let cat = 'pessoal', off = 0, rep = 'nao', dias = [];
   const days = [0, 1, 2].map((o) => L.dayLabel(L.addDays(today(), o), today()));
@@ -2624,10 +2671,18 @@ document.addEventListener('click', (e) => {
     case 'news-ok': S.news = { ...(S.news || {}), google: true }; save(); render(true); break;
     case 'novidade': novidadeSheet(); break;
     case 'entrevista': { if (S.entrevista?.on || S.entrevista?.pausa) { S.entrevista.on = true; S.entrevista.pausa = false; U.tab = 'faz'; entrevistaAsk(); } else entrevistaStart(); U.scrollChat = true; render(true); break; }
+    case 'outra': { const inp = document.getElementById('chatInput'); if (inp) { inp.placeholder = v || 'Escreva do seu jeito'; inp.focus(); inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); } break; }
     case 'entrevista-de-novo': entrevistaStart(); U.scrollChat = true; render(true); break;
     case 'entrevista-nao': S.entrevistaNao = true; save(); render(true); break;
     case 'google-depois': S.googleNudge = true; save(); render(true); break;
     case 'trialok': S.trialSeen = true; save(); render(true); break;
+    case 'editroutine': { const r = S.routines.find((x) => x.id === id); if (r) routineSheet(r, (spec) => {
+      const prev = [{ ...r }];
+      const u = L.updateRoutine(S.tasks, S.routines, r.id, spec, today()); S.tasks = u.tasks; S.routines = u.routines;
+      S.stats.routineEdits = (S.stats.routineEdits || 0) + 1; save(); render(true);
+      toast('Rotina atualizada', { label: 'Desfazer', run: () => { restoreRoutines(prev); render(true); } });
+    }); break; }
+    case 'propedit': { const m = S.chat.find((x) => x.id === id); if (m?.proposal?.status === 'pending') propEditSheet(m); break; }
     case 'delroutine': { const r = S.routines.find((x) => x.id === id); if (r) confirmSheet(`Apagar a rotina "${r.title}"?`, 'As próximas vezes saem da agenda. O que você já fez continua no histórico.', 'Apagar', () => { deleteRoutine(id); render(true); toast('Rotina apagada'); }); break; }
     case 'mes': U.mes = +v === 0 ? null : L.addMonths(U.mes || L.monthOf(today()), +v); if (U.mes === L.monthOf(today())) U.mes = null; render(); break;
     case 'fin-gasto': movSheet('saida'); break;
