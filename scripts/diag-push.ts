@@ -34,6 +34,16 @@ const nv = states.filter((s) => s.name).map((s) => {
 });
 console.log(`::warning::NOVIDADE GOOGLE: ${nv.join(' ‖ ')}`);
 
+// Google Agenda por pessoa: só contagens (nunca o nome dos compromissos).
+const ga: any[] = await get('states?select=user_id,data');
+const gl = ga.filter((x) => x.data?.integ?.agenda).map((x) => {
+  const d = x.data, ts = (d.tasks || []).filter((t: any) => t.source === 'google');
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  const fut = ts.filter((t: any) => t.date >= hoje), dias = new Set(fut.map((t: any) => t.date)).size;
+  return `${String(d.name || '?').split(' ')[0]}: ${ts.length} do Google (${fut.length} de hoje em diante, em ${dias} dias; até ${fut.map((t: any) => t.date).sort().pop() || '-'}) · sem horário ${fut.filter((t: any) => t.start == null).length} · sincronizou ${d.stats?.agendaSync || 0}x · agendas ${d.stats?.gcals ?? '?'} · erro ${d.stats?.agendaErr || '-'} · cópias velhas ${Object.keys(d.gmap || {}).length}`;
+});
+console.log(`::warning::GOOGLE AGENDA: ${gl.join(' ‖ ') || 'ninguém ligou'}`);
+
 // Login com Google ligado?
 const anon = keys.find((k) => k.name === 'anon' || k.type === 'publishable')!.api_key;
 const conf: any = await (await fetch(`https://${REF}.supabase.co/auth/v1/settings`, { headers: { apikey: anon } })).json();
