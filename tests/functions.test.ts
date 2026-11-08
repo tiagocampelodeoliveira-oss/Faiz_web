@@ -48,6 +48,7 @@ const db = {
   push_log: [] as any[],
   google_tokens: [] as any[],
   cal_feeds: [] as any[],
+  manual_push: [] as any[],
 };
 const pushed: any[] = [];
 let pushStatus = 201;
@@ -85,7 +86,14 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
   if (url.pathname === '/auth/v1/user') return (init.headers as any).Authorization === 'Bearer user-token' ? Response.json({ id: U }) : new Response('{}', { status: 401 });
   const table = url.pathname.replace('/rest/v1/', '') as keyof typeof db;
   assert.equal((init.headers as any).apikey, 'service-jwt', 'servidor usa a chave de serviço');
+  if (method === 'GET' && table === 'manual_push') return Response.json(db.manual_push.filter((m: any) => !m.sent_at && m.send_at <= String(url.searchParams.get('send_at')).slice(4)));
   if (method === 'GET') return Response.json(db[table]);
+  if (method === 'PATCH' && table === 'manual_push') {
+    const id = Number(String(url.searchParams.get('id')).slice(3)), soNovo = url.searchParams.get('sent_at') === 'is.null';
+    const hit = db.manual_push.filter((m: any) => m.id === id && (!soNovo || !m.sent_at));
+    hit.forEach((m: any) => Object.assign(m, JSON.parse(String(init.body))));
+    return Response.json(hit);
+  }
   if (method === 'PATCH') { const v = JSON.parse(String(init.body)); (db as any)[table] = (db as any)[table].map((r: any) => ({ ...r, ...v })); return new Response(null, { status: 204 }); }
   if (method === 'DELETE') { if (table === 'subs') db.subs = []; if (table === 'cal_feeds') db.cal_feeds = []; return new Response(null, { status: 204 }); }
   const rows = [].concat(JSON.parse(String(init.body)));
@@ -123,6 +131,23 @@ test('relógio manda o aviso da corrida às 18:20, e só uma vez', async () => {
   assert.equal(pushed.length, 1);
   assert.deepEqual(db.push_log.map((x) => [x.kind, x.host, x.status, x.ok]), [['t', 'web.push.apple.com', 201, true]], 'resultado do aviso registrado, sem o texto');
   assert.ok(!('title' in db.push_log[0]) && !('body' in db.push_log[0]));
+});
+
+test('aviso pessoal do dono sai na hora marcada, uma vez só', async () => {
+  setNow('2026-10-29T15:00:00Z');
+  db.sent = db.states[0].data.tasks.map((t: any) => ({ user_id: U, key: `t:${t.id}:x` }));
+  db.manual_push = [{ id: 1, user_id: U, title: 'Isa, sumiu! 😅', body: 'Me manda 3 coisas', url: './?v=planejar', send_at: '2026-10-29T15:30:00.000Z', sent_at: null }];
+  const antes = pushed.length;
+  await post(tick, {}, { 'x-tick-secret': 's3cret' });
+  assert.equal(pushed.filter((p) => p.title === 'Isa, sumiu! 😅').length, 0, 'antes da hora, nada');
+  setNow('2026-10-29T15:31:00Z');
+  await post(tick, {}, { 'x-tick-secret': 's3cret' });
+  await post(tick, {}, { 'x-tick-secret': 's3cret' });
+  const meus = pushed.slice(antes).filter((p) => p.title === 'Isa, sumiu! 😅');
+  assert.equal(meus.length, 1, 'sai uma vez só');
+  assert.equal(meus[0].url, './?v=planejar');
+  assert.equal(db.manual_push[0].entregues, 1);
+  assert.equal(db.push_log.at(-1).kind, 'manual');
 });
 
 test('celular que saiu (410) é apagado', async () => {
