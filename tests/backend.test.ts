@@ -245,24 +245,25 @@ test('domingo às 19h: planejar a semana (sem o aviso de volta junto)', () => {
   assert.equal(dom.filter((n) => n.tag === 'volta').length, 0);
 });
 
-test('volta: quem não abriu hoje recebe às 12h e às 19h, com a situação para a IA', () => {
-  const st: AppState = { ...base, name: 'Isabela Souza', stats: { days: ['2026-10-26', '2026-10-27'], requests: 1 } as any };
-  const v = (hora: string, s: AppState = st) => dueNotices(s, at('2026-10-29', hora), new Set()).filter((n) => n.tag === 'volta');
+test('volta: 3 dias sem abrir, às 12h e às 19h; depois de 2 em 2 dias', () => {
+  const st: AppState = { ...base, name: 'Isabela Souza', stats: { days: ['2026-10-25', '2026-10-26'], requests: 1 } as any };
+  const v = (hora: string, s: AppState = st, dia = '2026-10-29') => dueNotices(s, at(dia, hora), new Set()).filter((n) => n.tag === 'volta');
   const meio = v('12:00');
   assert.deepEqual(meio.map((n) => n.key), ['v:2026-10-29:12h']);
   assert.equal(meio[0].url, './?v=planejar');
   assert.equal(meio[0].ia!.nome, 'Isabela');
-  assert.equal(meio[0].ia!.diasSemAbrir, 2);
+  assert.equal(meio[0].ia!.diasSemAbrir, 3);
   assert.equal(meio[0].ia!.pedidosAIris, 1);
   assert.ok(meio[0].ia!.hojeAberto.some((x) => /Corrida às 18:30/.test(x)), JSON.stringify(meio[0].ia));
   assert.match(meio[0].title, /^Isabela, ainda não te vi hoje/);
   assert.match(meio[0].body, /^Hoje tem beber água às 15:00/);
   assert.deepEqual(v('19:05').map((n) => n.key), ['v:2026-10-29:19h']);
   assert.deepEqual(v('15:00'), [], 'só às 12h e às 19h');
-  assert.deepEqual(v('12:00', { ...st, stats: { days: ['2026-10-29'] } }), [], 'já abriu hoje: nada');
+  const sem = (d: number) => ({ ...st, stats: { days: [new Date(Date.parse('2026-10-29T12:00:00Z') - d * 864e5).toISOString().slice(0, 10)] } });
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map((d) => v('12:00', sem(d)).length), [0, 0, 0, 1, 0, 1, 0, 1], '3º, 5º, 7º dia sem abrir');
   assert.deepEqual(v('12:00', { ...st, stats: { days: [] } }), [], 'nunca abriu: nada');
-  assert.deepEqual(v('19:00', { ...st, startDate: '2026-10-27' }), [], 'dia de aviso da pesquisa: sem o das 19h');
-  assert.equal(v('12:00', { ...st, startDate: '2026-10-27' }).length, 1, 'mas o das 12h sai');
+  assert.deepEqual(v('19:00', { ...st, startDate: '2026-10-25' }), [], 'dia de aviso da pesquisa: sem o das 19h');
+  assert.equal(v('12:00', { ...st, startDate: '2026-10-25' }).length, 1, 'mas o das 12h sai');
 });
 
 test('volta: lê a resposta da IA e recusa fora do formato', () => {

@@ -292,13 +292,16 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const n = all.filter((t) => t && t.date > date && t.date <= fim && t.status !== 'feito').length;
     add({ key: `w:${date}`, title: IRIS.semana.at(pick(date))!, body: IRIS.semanaCorpo(n), url: './?v=planejar', tag: 'semana' });
   }
-  // 4c. Volta (8/11, pedido do Tiago; substitui o "sumiu" de 2 e 5 dias): se a pessoa ainda não abriu o Faiz hoje,
+  // 4c. Volta (8/11, pedido do Tiago; substitui o "sumiu" de 2 e 5 dias): 3 dias ou mais sem abrir o Faiz,
   // um aviso às 12:00 e outro às 19:00. O relógio (tick) pede o texto à IA com a situação dela; sem IA, usa o texto pronto.
   const dias = state.stats?.days ?? [];
   const slot = min >= 12 * 60 && min < 13 * 60 ? '12h' : min >= 19 * 60 && min < 20 * 60 ? '19h' : null;
   const domingoPlanejar = dow === 0 && all.length > 0;
-  if (on('sumiu') && dias.length && !dias.includes(date) && slot && !(slot === '19h' && (pesquisaHoje || domingoPlanejar))) {
-    const ultimo = [...dias].sort().at(-1)!;
+  // Só para quem está há 3 dias ou mais sem abrir; se continuar sem abrir, de 2 em 2 dias (3º, 5º, 7º... dia), às 12h e às 19h.
+  const ultimoUso = dias.length ? [...dias].sort().at(-1)! : '';
+  const semAbrir = ultimoUso ? Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(ultimoUso + 'T12:00:00Z')) / 864e5) : 0;
+  if (on('sumiu') && dias.length && semAbrir >= 3 && (semAbrir - 3) % 2 === 0 && slot && !(slot === '19h' && (pesquisaHoje || domingoPlanejar))) {
+    const ultimo = ultimoUso;
     const st = state as any;
     const minhasHoje = open.filter((t) => !isGoogle(t));
     const ctx: VoltaCtx = {

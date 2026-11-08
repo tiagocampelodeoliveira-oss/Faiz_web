@@ -155,7 +155,7 @@ test('aviso de volta: a IA escreve com a situação da pessoa', async () => {
   setNow('2026-10-29T15:00:00Z'); // 12:00 em Brasília
   db.sent = []; db.manual_push = [];
   const st = db.states[0].data as any; const antesStats = st.stats;
-  st.stats = { days: ['2026-10-27'], requests: 3 };
+  st.stats = { days: ['2026-10-26'], requests: 3 };
   const antes = pushed.length;
   await post(tick, {}, { 'x-tick-secret': 's3cret' });
   const v = pushed.slice(antes).find((p) => p.tag === 'volta');
@@ -163,7 +163,7 @@ test('aviso de volta: a IA escreve com a situação da pessoa', async () => {
   assert.equal(v.title, 'Tiago, a corrida te espera 🏃');
   assert.equal(v.url, './?v=planejar');
   assert.ok(!('ia' in v), 'a situação não vai no aviso');
-  assert.match(anthropicBody.messages[0].content, /"diasSemAbrir":2/);
+  assert.match(anthropicBody.messages[0].content, /"diasSemAbrir":3/);
   assert.ok(!/valor|R\$/.test(anthropicBody.messages[0].content));
   assert.equal(db.ai_log.at(-1).model, 'volta:claude-sonnet-5-5');
   await post(tick, {}, { 'x-tick-secret': 's3cret' });
