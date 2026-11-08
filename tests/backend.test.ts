@@ -264,6 +264,12 @@ test('pesquisa do teste: dia 3 e dia 7 às 19h, só se não respondeu', () => {
   assert.deepEqual(q('2026-11-03', '19:00').map((n) => n.key), ['q:d3']);
   assert.equal(q('2026-11-03', '19:00')[0].url, './?v=pesquisa');
   assert.deepEqual(q('2026-11-04', '19:00'), [], 'só no 3º dia');
+  assert.deepEqual(q('2026-11-02', '19:00').map((n) => n.key), ['q:d3r'], 'lembrete no dia seguinte');
+  assert.match(q('2026-11-02', '19:00')[0].body, /muito importante pro grupo Faiz/);
+  assert.deepEqual(q('2026-11-01', '19:00').map((n) => n.key), ['q:d3r'], 'lembrete vale por 2 dias (sai uma vez só)');
+  assert.deepEqual(q('2026-10-31', '19:00'), [], 'depois disso, nada até o dia 7');
+  assert.deepEqual(q('2026-10-29', '19:00', { d3: {} }).map((n) => n.key), ['q:d7r'], 'lembrete do dia 7');
+  assert.deepEqual(q('2026-10-27', '19:00', { d3: {} }).map((n) => n.key), ['q:d7']);
   assert.deepEqual(q('2026-11-03', '18:59'), [], 'só depois das 19h');
   assert.deepEqual(q('2026-11-03', '19:30', { d3: { nota: 4 } }), [], 'já respondeu');
   assert.deepEqual(q('2026-10-30', '20:00', { d3: {} }).map((n) => n.key), ['q:d7']);

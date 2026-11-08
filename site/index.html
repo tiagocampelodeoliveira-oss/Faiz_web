@@ -462,7 +462,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-06 13:36';
+const APP_VERSION = '2026-11-08 11:56';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -2050,6 +2050,26 @@ function pesquisaDevida() {
   if (dias >= 2 && dias < 6 && !S.survey?.d3) return 'd3';
   return null;
 }
+/** Dia do lembrete: a pessoa já passou do dia da pesquisa e não respondeu. */
+function pesquisaAtrasada() {
+  const q = pesquisaDevida(); if (!q) return null;
+  const dias = L.diffDays(S.startDate, today());
+  return (q === 'd3' && dias >= 3) || (q === 'd7' && dias >= 7) ? q : null;
+}
+/** Lembrete dentro do app, uma vez por pesquisa, ao abrir no dia seguinte. */
+function surveyNudge() {
+  const q = pesquisaAtrasada(); if (!q || S.surveyNudge?.[q]) return;
+  S.surveyNudge = { ...(S.surveyNudge || {}), [q]: today() }; save();
+  sheet(`<div class="row" style="gap:10px">${irisImg('pensando', 56)}<div class="sub" style="flex:1"><b>Ainda dá tempo! 🙏</b></div></div>
+    <p style="margin:0">Sua opinião é <b>muito importante</b> pro grupo Faiz entender o que já tá bom e o que dá pra melhorar. ${q === 'd7' ? 'São 2 minutinhos.' : 'São só 4 perguntas rápidas.'}</p>
+    <div class="row"><button class="btn light" type="button" data-sn="depois" style="flex:1">Depois</button><button class="btn" type="button" data-sn="ok" style="flex:2">Responder agora</button></div>`, (el) => {
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-sn]'); if (!b) return;
+      closeSheet();
+      if (b.dataset.sn === 'ok') setTimeout(() => surveySheet(q), 250);
+    });
+  });
+}
 function surveySheet(qual) {
   const P = PESQUISA[qual]; if (!P) return;
   const resp = {};
@@ -2266,7 +2286,7 @@ const screens = {
       ${integ('agenda') && S.integ.agendaSoPrincipal && !S.news?.gcals ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Você usa mais de uma agenda no Google?</b> Por enquanto eu só trago a principal. Posso trazer as outras também (escola, trabalho, feriados).</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="gcals-nao">Só a principal</button><button class="pill navy" type="button" data-act="g-ligar" data-v="agenda">Trazer todas</button></div></div>` : ''}
       ${!S.account?.google && S.stats.days.length >= 2 && !S.googleNudge && !novidadeDevida() ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Salva sua conta com o Google?</b> Assim você não perde nada se trocar de celular.</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="google-depois">Depois</button><button class="pill navy" type="button" data-act="google-link">Salvar com Google</button></div></div>` : ''}
       ${U.trialOver && !S.trialSeen ? `<button class="card irisline" type="button" data-act="trialok">${irisImg('comemorando', 44)}<span><b>Fechamos os 7 dias! Valeu demais por testar 💜</b> Minha inteligência pausou por enquanto, mas avisos, contas e rotinas continuam. Toque para fechar.</span></button>` : ''}
-      ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span><b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏</span></button>` : ''}
+      ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span>${pesquisaAtrasada() ? `<b>Ainda dá tempo! 🙏</b> Sua opinião é muito importante pro grupo Faiz entender o que já tá bom e o que dá pra melhorar.` : `<b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏`}</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}
       ${(() => { const bs = L.billsOf(S.fin, L.monthOf(d), d).filter((b) => !b.pago && b.dias <= 3); if (!bs.length) return ''; const b = bs[0];
         return `<button class="card irisline" type="button" data-act="tab" data-v="contas"><span class="ico ${b.status === 'atrasada' ? 'red' : 'peach'}" style="font-size:20px">🧾</span><span><b>${esc(b.fixa.nome)}</b> ${esc(billWhen(b))} · ${brl(b.valor)}${bs.length > 1 ? ` <span class="meta">e mais ${bs.length - 1}</span>` : ''}</span></button>`; })()}
@@ -2723,6 +2743,7 @@ render();
 openLink(location.href);
 clearNotifications();
 if (!S.tourSeen && !/[?&](t|v)=/.test(location.search) && !(IS_IOS && !STANDALONE && !S.skipInstall && !S.onboarded)) setTimeout(showTour, 400);
+else if (S.tourSeen && !/[?&](t|v)=/.test(location.search)) setTimeout(surveyNudge, 800);
 </script>
 </body>
 </html>

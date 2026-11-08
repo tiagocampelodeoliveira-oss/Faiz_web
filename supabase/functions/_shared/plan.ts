@@ -266,8 +266,15 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   // 4. Pesquisa do teste: no 3º e no 7º dia de uso, às 19:00, se ainda não respondeu.
   if (state.startDate && /^\d{4}-\d{2}-\d{2}$/.test(state.startDate) && min >= 19 * 60 && min < 22 * 60) {
     const dias = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(state.startDate + 'T12:00:00Z')) / 864e5);
-    if (dias >= 6 && !state.survey?.d7) add({ key: 'q:d7', title: 'Fechamos a semana! 🎉', body: 'Me dá sua nota final? Leva 2 minutos e muda o Faiz de verdade.', url: './?v=pesquisa', tag: 'pesquisa' });
-    else if (dias >= 2 && dias < 6 && !state.survey?.d3) add({ key: 'q:d3', title: 'Me ajuda com 1 minutinho? 🙏', body: 'Me conta como tá sendo comigo até agora. São 4 perguntas rápidas.', url: './?v=pesquisa', tag: 'pesquisa' });
+    // Lembrete uma vez só, nos 2 dias seguintes, para quem ainda não respondeu (q:d3r / q:d7r).
+    const IMPORTANTE = 'Sua opinião é muito importante pro grupo Faiz entender o que já tá bom e o que dá pra melhorar.';
+    if (dias >= 6 && !state.survey?.d7) {
+      if (dias >= 7 && dias <= 8) add({ key: 'q:d7r', title: 'Ainda dá tempo! 🙏', body: `${IMPORTANTE} São 2 minutinhos.`, url: './?v=pesquisa', tag: 'pesquisa' });
+      else add({ key: 'q:d7', title: 'Fechamos a semana! 🎉', body: 'Me dá sua nota final? Leva 2 minutos e muda o Faiz de verdade.', url: './?v=pesquisa', tag: 'pesquisa' });
+    } else if (dias >= 2 && dias < 6 && !state.survey?.d3) {
+      if (dias >= 3 && dias <= 4) add({ key: 'q:d3r', title: 'Ainda dá tempo! 🙏', body: `${IMPORTANTE} São 4 perguntas rápidas.`, url: './?v=pesquisa', tag: 'pesquisa' });
+      else if (dias === 2) add({ key: 'q:d3', title: 'Me ajuda com 1 minutinho? 🙏', body: 'Me conta como tá sendo comigo até agora. São 4 perguntas rápidas.', url: './?v=pesquisa', tag: 'pesquisa' });
+    }
   }
   // 4b. Domingo às 19:00: planejar a semana.
   const dow = new Date(date + 'T12:00:00Z').getUTCDay();
