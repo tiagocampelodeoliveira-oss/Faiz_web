@@ -52,6 +52,20 @@ Deno.serve(async (req) => {
         }
       }
     }
+    // Avisos pessoais agendados pelo dono (workflow "Mandar aviso"): cada um sai uma vez só.
+    const manuais: { id: number; user_id: string; title: string; body: string; url: string }[] =
+      await rest(`manual_push?select=id,user_id,title,body,url&sent_at=is.null&send_at=lte.${now.toISOString()}`).catch(() => []);
+    for (const m of manuais) {
+      const won = await rest(`manual_push?id=eq.${m.id}&sent_at=is.null`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ sent_at: now.toISOString() }) });
+      if (!won?.length) continue;
+      let ok = 0;
+      for (const s of byUser.get(m.user_id) || []) {
+        const r = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title: m.title, body: m.body, url: m.url, tag: 'pessoal' }, keys, subject);
+        await pushLog(m.user_id, 'manual', s.endpoint, r);
+        if (r.ok) { ok++; summary.sent++; } else { summary.failed++; if (r.gone) { await rest(`subs?endpoint=eq.${encodeURIComponent(s.endpoint)}`, { method: 'DELETE' }); summary.removed++; } }
+      }
+      await rest(`manual_push?id=eq.${m.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ entregues: ok }) });
+    }
     if (now.getUTCMinutes() === 7) await rest(`sent?created_at=lt.${new Date(now.getTime() - 7 * 864e5).toISOString()}`, { method: 'DELETE' });
   } catch (e) {
     console.error('tick', e);

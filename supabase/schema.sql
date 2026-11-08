@@ -129,3 +129,18 @@ create table if not exists public.cal_feeds (
   last_fetch timestamptz
 );
 alter table public.cal_feeds enable row level security;
+
+-- Avisos pessoais mandados à mão pelo dono do teste (workflow "Mandar aviso"). O relógio (tick) manda quando chega a hora. Só o servidor.
+create table if not exists public.manual_push (
+  id bigserial primary key,
+  user_id uuid not null references auth.users on delete cascade,
+  nome text,
+  title text not null,
+  body text not null,
+  url text not null default './?v=planejar',
+  send_at timestamptz not null default now(),
+  sent_at timestamptz,
+  entregues int,
+  created_at timestamptz not null default now()
+);
+alter table public.manual_push enable row level security;
