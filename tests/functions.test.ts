@@ -65,6 +65,7 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
   if (url.host === 'web.push.apple.com') { pushed.push(await open(init.body as Uint8Array)); return new Response('', { status: pushStatus }); }
   if (url.host === 'api.anthropic.com') {
     anthropicBody = JSON.parse(String(init.body)); models.push(anthropicBody.model);
+    if (typeof anthropicBody.system === 'string' && anthropicBody.system.includes('aviso de celular')) return Response.json({ content: [{ type: 'text', text: '{"titulo":"Tiago, a corrida te espera 🏃","texto":"18:30 tá chegando. Me fala \\"bora\\" que eu seguro teu horário."}' }], usage: { output_tokens: 40 }, stop_reason: 'end_turn' });
     if (noCredit) return new Response('{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}', { status: 400 });
     if (sonnetDown && anthropicBody.model === 'claude-sonnet-5-5') return new Response('{"error":"overloaded"}', { status: 529 });
     return Response.json({ content: [{ type: 'text', text: '{"acao":"conversa","resposta":"Oi"}' }] });
@@ -148,6 +149,26 @@ test('aviso pessoal do dono sai na hora marcada, uma vez só', async () => {
   assert.equal(meus[0].url, './?v=planejar');
   assert.equal(db.manual_push[0].entregues, 1);
   assert.equal(db.push_log.at(-1).kind, 'manual');
+});
+
+test('aviso de volta: a IA escreve com a situação da pessoa', async () => {
+  setNow('2026-10-29T15:00:00Z'); // 12:00 em Brasília
+  db.sent = []; db.manual_push = [];
+  const st = db.states[0].data as any; const antesStats = st.stats;
+  st.stats = { days: ['2026-10-27'], requests: 3 };
+  const antes = pushed.length;
+  await post(tick, {}, { 'x-tick-secret': 's3cret' });
+  const v = pushed.slice(antes).find((p) => p.tag === 'volta');
+  assert.ok(v, JSON.stringify(pushed.slice(antes)));
+  assert.equal(v.title, 'Tiago, a corrida te espera 🏃');
+  assert.equal(v.url, './?v=planejar');
+  assert.ok(!('ia' in v), 'a situação não vai no aviso');
+  assert.match(anthropicBody.messages[0].content, /"diasSemAbrir":2/);
+  assert.ok(!/valor|R\$/.test(anthropicBody.messages[0].content));
+  assert.equal(db.ai_log.at(-1).model, 'volta:claude-sonnet-5-5');
+  await post(tick, {}, { 'x-tick-secret': 's3cret' });
+  assert.equal(pushed.slice(antes).filter((p) => p.tag === 'volta').length, 1, 'uma vez só');
+  st.stats = antesStats;
 });
 
 test('celular que saiu (410) é apagado', async () => {

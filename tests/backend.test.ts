@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { encrypt, generateVapidKeys, sendPush, unb64u, b64u, _test } from '../supabase/functions/_shared/webpush.ts';
-import { dueNotices, localNow, missedStreak, trialInfo, type AppState } from '../supabase/functions/_shared/plan.ts';
+import { dueNotices, localNow, missedStreak, trialInfo, voltaLer, voltaPrompt, type AppState } from '../supabase/functions/_shared/plan.ts';
 
 const subtle = globalThis.crypto.subtle;
 const te = new TextEncoder();
@@ -237,13 +237,42 @@ test('véspera às 20h: o que começa cedo amanhã; ou convite se amanhã está 
   assert.deepEqual(dueNotices(vazio, at('2026-10-29', '20:10'), new Set()).filter((n) => n.tag === 'amanha').map((n) => n.key), ['a:2026-10-29']);
 });
 
-test('domingo às 19h: planejar a semana; sumiu há 2 dias: chama de volta', () => {
-  const dom = dueNotices({ ...base, tasks: base.tasks }, at('2026-11-01', '19:10'), new Set()).find((n) => n.tag === 'semana')!;
-  assert.equal(dom.key, 'w:2026-11-01');
-  assert.equal(dom.url, './?v=planejar');
-  const sumido: AppState = { ...base, stats: { days: ['2026-10-25', '2026-10-27'] } };
-  assert.deepEqual(dueNotices(sumido, at('2026-10-29', '19:00'), new Set()).filter((n) => n.tag === 'sumiu').map((n) => n.key), ['z:2026-10-29']);
-  assert.deepEqual(dueNotices({ ...sumido, stats: { days: ['2026-10-28'] } }, at('2026-10-29', '19:00'), new Set()).filter((n) => n.tag === 'sumiu'), []);
+test('domingo às 19h: planejar a semana (sem o aviso de volta junto)', () => {
+  const dom = dueNotices({ ...base, tasks: base.tasks, stats: { days: ['2026-10-30'] } }, at('2026-11-01', '19:10'), new Set());
+  const w = dom.find((n) => n.tag === 'semana')!;
+  assert.equal(w.key, 'w:2026-11-01');
+  assert.equal(w.url, './?v=planejar');
+  assert.equal(dom.filter((n) => n.tag === 'volta').length, 0);
+});
+
+test('volta: quem não abriu hoje recebe às 12h e às 19h, com a situação para a IA', () => {
+  const st: AppState = { ...base, name: 'Isabela Souza', stats: { days: ['2026-10-26', '2026-10-27'], requests: 1 } as any };
+  const v = (hora: string, s: AppState = st) => dueNotices(s, at('2026-10-29', hora), new Set()).filter((n) => n.tag === 'volta');
+  const meio = v('12:00');
+  assert.deepEqual(meio.map((n) => n.key), ['v:2026-10-29:12h']);
+  assert.equal(meio[0].url, './?v=planejar');
+  assert.equal(meio[0].ia!.nome, 'Isabela');
+  assert.equal(meio[0].ia!.diasSemAbrir, 2);
+  assert.equal(meio[0].ia!.pedidosAIris, 1);
+  assert.ok(meio[0].ia!.hojeAberto.some((x) => /Corrida às 18:30/.test(x)), JSON.stringify(meio[0].ia));
+  assert.match(meio[0].title, /^Isabela, ainda não te vi hoje/);
+  assert.match(meio[0].body, /^Hoje tem beber água às 15:00/);
+  assert.deepEqual(v('19:05').map((n) => n.key), ['v:2026-10-29:19h']);
+  assert.deepEqual(v('15:00'), [], 'só às 12h e às 19h');
+  assert.deepEqual(v('12:00', { ...st, stats: { days: ['2026-10-29'] } }), [], 'já abriu hoje: nada');
+  assert.deepEqual(v('12:00', { ...st, stats: { days: [] } }), [], 'nunca abriu: nada');
+  assert.deepEqual(v('19:00', { ...st, startDate: '2026-10-27' }), [], 'dia de aviso da pesquisa: sem o das 19h');
+  assert.equal(v('12:00', { ...st, startDate: '2026-10-27' }).length, 1, 'mas o das 12h sai');
+});
+
+test('volta: lê a resposta da IA e recusa fora do formato', () => {
+  assert.deepEqual(voltaLer('{"titulo":"Isa, bora? 👀","texto":"Me manda 3 coisas de amanhã."}'), { title: 'Isa, bora? 👀', body: 'Me manda 3 coisas de amanhã.' });
+  assert.equal(voltaLer('oi'), null);
+  assert.equal(voltaLer('{"titulo":"Abre o Faz","texto":"x"}'), null, 'nunca "Faz"');
+  assert.equal(voltaLer(JSON.stringify({ titulo: 'a', texto: 'x'.repeat(300) })), null);
+  const p = voltaPrompt({ nome: 'Leo' } as any);
+  assert.match(p.system, /Responda só com JSON/);
+  assert.match(p.user, /"nome":"Leo"/);
 });
 
 test('avisos novos são obrigatórios: chegam mesmo que o estado peça para desligar', () => {

@@ -1,12 +1,39 @@
 // Roda a cada minuto (pg_cron). Lê a agenda de cada pessoa e manda os avisos devidos.
 // Protegida por um segredo no cabeçalho x-tick-secret (publicada com --no-verify-jwt).
 import { json, rest, vapid } from '../_shared/env.ts';
-import { dueNotices, type AppState } from '../_shared/plan.ts';
+import { dueNotices, voltaLer, voltaPrompt, type AppState, type Notice } from '../_shared/plan.ts';
 import { sendPush } from '../_shared/webpush.ts';
 
 /** Resultado de cada aviso (sem o texto), para achar quem parou de receber e por quê. Nunca derruba o relógio. */
 async function pushLog(userId: string, kind: string, endpoint: string, r: { ok: boolean; status: number; gone: boolean }): Promise<void> {
   try { await rest('push_log', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: userId, kind, host: new URL(endpoint).host, status: r.status, ok: r.ok, gone: r.gone }) }); } catch (e) { console.error('push_log', e); }
+}
+
+/** Aviso de volta: a IA escreve com a situação da pessoa. Em até 12 s; se falhar, fica o texto pronto. Registra em ai_log (sem conteúdo). */
+async function voltaIA(userId: string, n: Notice): Promise<void> {
+  const key = Deno.env.get('FAIZ_ANTHROPIC_KEY');
+  if (!key || !n.ia) return;
+  const { system, user } = voltaPrompt(n.ia);
+  const model = Deno.env.get('FAIZ_AI_MODEL') || 'claude-sonnet-5-5';
+  const t0 = Date.now();
+  let status = 0, err = '', stop = '', out_tokens = 0;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: AbortSignal.timeout(12000),
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model, max_tokens: 300, system, messages: [{ role: 'user', content: user }] }),
+    });
+    status = res.status;
+    if (!res.ok) err = (await res.text().catch(() => '')).slice(0, 200);
+    else {
+      const out = await res.json();
+      stop = out.stop_reason || ''; out_tokens = out.usage?.output_tokens || 0;
+      const txt = (out.content || []).filter((c: { type: string }) => c.type === 'text').map((c: { text: string }) => c.text).join('');
+      const v = voltaLer(txt);
+      if (v) { n.title = v.title; n.body = v.body; } else err = 'formato';
+    }
+  } catch (e) { err = String((e as Error)?.message || e).slice(0, 200); }
+  try { await rest('ai_log', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: userId, model: `volta:${model}`, status, stop, ms: Date.now() - t0, out_tokens, err: err || null }) }); } catch (e) { console.error('ai_log', e); }
 }
 
 Deno.serve(async (req) => {
@@ -40,6 +67,7 @@ Deno.serve(async (req) => {
       });
       const mine = new Set((won || []).map((w) => w.key));
       for (const n of due.filter((d) => mine.has(d.key))) {
+        if (n.ia) await voltaIA(st.user_id, n);
         for (const s of byUser.get(st.user_id) || []) {
           const r = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title: n.title, body: n.body, url: n.url, tag: n.tag }, keys, subject);
           await pushLog(st.user_id, n.key.split(':')[0], s.endpoint, r);

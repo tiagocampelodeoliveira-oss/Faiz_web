@@ -36,7 +36,13 @@ export type AppState = {
 
 export type Bill = { id: string; tipo: 'conta' | 'renda'; nome: string; valor: number; dia: number; desde?: string; ate?: string; freq?: 'mensal' | 'semanal' | 'anual'; mes?: number; dow?: number };
 
-export type Notice = { key: string; title: string; body: string; url: string; tag: string };
+export type Notice = { key: string; title: string; body: string; url: string; tag: string; ia?: VoltaCtx };
+
+/** Situação da pessoa para a IA escrever o aviso de volta (sem conversas e sem valores de dinheiro). */
+export type VoltaCtx = {
+  nome: string; hora: '12h' | '19h'; diaDaSemana: string; diasSemAbrir: number; diasQueUsou: number; pedidosAIris: number; planosConfirmados: number;
+  hojeAberto: string[]; feitasHoje: number; amanha: number; rotinas: number; usaContas: boolean; usaVoz: boolean; googleAgenda: boolean;
+};
 
 const pad = (n: number) => String(n).padStart(2, '0');
 export const fmt = (m: number) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`;
@@ -264,14 +270,17 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     add({ key: `n:${date}`, title, body, url: './?v=noite', tag: 'noite' });
   }
   // 4. Pesquisa do teste: no 3º e no 7º dia de uso, às 19:00, se ainda não respondeu.
+  let pesquisaHoje = false; // dia de aviso de pesquisa: o aviso de volta das 19h fica de fora para não chegar junto
   if (state.startDate && /^\d{4}-\d{2}-\d{2}$/.test(state.startDate) && min >= 19 * 60 && min < 22 * 60) {
     const dias = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(state.startDate + 'T12:00:00Z')) / 864e5);
     // Lembrete uma vez só, nos 2 dias seguintes, para quem ainda não respondeu (q:d3r / q:d7r).
     const IMPORTANTE = 'Sua opinião é muito importante pro grupo Faiz entender o que já tá bom e o que dá pra melhorar.';
     if (dias >= 6 && !state.survey?.d7) {
+      pesquisaHoje = dias <= 8;
       if (dias >= 7 && dias <= 8) add({ key: 'q:d7r', title: 'Ainda dá tempo! 🙏', body: `${IMPORTANTE} São 2 minutinhos.`, url: './?v=pesquisa', tag: 'pesquisa' });
       else add({ key: 'q:d7', title: 'Fechamos a semana! 🎉', body: 'Me dá sua nota final? Leva 2 minutos e muda o Faiz de verdade.', url: './?v=pesquisa', tag: 'pesquisa' });
     } else if (dias >= 2 && dias < 6 && !state.survey?.d3) {
+      pesquisaHoje = dias <= 4;
       if (dias >= 3 && dias <= 4) add({ key: 'q:d3r', title: 'Ainda dá tempo! 🙏', body: `${IMPORTANTE} São 4 perguntas rápidas.`, url: './?v=pesquisa', tag: 'pesquisa' });
       else if (dias === 2) add({ key: 'q:d3', title: 'Me ajuda com 1 minutinho? 🙏', body: 'Me conta como tá sendo comigo até agora. São 4 perguntas rápidas.', url: './?v=pesquisa', tag: 'pesquisa' });
     }
@@ -283,12 +292,30 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     const n = all.filter((t) => t && t.date > date && t.date <= fim && t.status !== 'feito').length;
     add({ key: `w:${date}`, title: IRIS.semana.at(pick(date))!, body: IRIS.semanaCorpo(n), url: './?v=planejar', tag: 'semana' });
   }
-  // 4c. Sumiu: 2 ou 5 dias sem abrir o Faiz, às 19:00.
+  // 4c. Volta (8/11, pedido do Tiago; substitui o "sumiu" de 2 e 5 dias): se a pessoa ainda não abriu o Faiz hoje,
+  // um aviso às 12:00 e outro às 19:00. O relógio (tick) pede o texto à IA com a situação dela; sem IA, usa o texto pronto.
   const dias = state.stats?.days ?? [];
-  if (on('sumiu') && dias.length && min >= 19 * 60 && min < 20 * 60) {
+  const slot = min >= 12 * 60 && min < 13 * 60 ? '12h' : min >= 19 * 60 && min < 20 * 60 ? '19h' : null;
+  const domingoPlanejar = dow === 0 && all.length > 0;
+  if (on('sumiu') && dias.length && !dias.includes(date) && slot && !(slot === '19h' && (pesquisaHoje || domingoPlanejar))) {
     const ultimo = [...dias].sort().at(-1)!;
-    const sem = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(ultimo + 'T12:00:00Z')) / 864e5);
-    if (sem === 2 || sem === 5) add({ key: `z:${date}`, title: IRIS.sumiu.at(pick(date))!, body: IRIS.sumiuCorpo.at(pick(date))!, url: './', tag: 'sumiu' });
+    const st = state as any;
+    const minhasHoje = open.filter((t) => !isGoogle(t));
+    const ctx: VoltaCtx = {
+      nome: (state.name || '').trim().split(/\s+/)[0] || '', hora: slot,
+      diaDaSemana: ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][dow],
+      diasSemAbrir: Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(ultimo + 'T12:00:00Z')) / 864e5),
+      diasQueUsou: dias.length, pedidosAIris: Number(st.stats?.requests) || 0, planosConfirmados: Number(st.stats?.confirmed) || 0,
+      hojeAberto: minhasHoje.filter((t) => t.start == null || t.start >= min).slice(0, 4).map((t) => {
+        const k = missedStreak(all, t.title, date);
+        return `${t.title}${t.start != null ? ` às ${fmt(t.start)}` : ''}${k ? ` (furou ${k}x seguidas)` : ''}`;
+      }),
+      feitasHoje: today.filter((t) => !isGoogle(t) && t.status === 'feito').length,
+      amanha: all.filter((t) => t && t.date === daysBefore(date, -1)).length,
+      rotinas: Array.isArray(st.routines) ? st.routines.length : 0,
+      usaContas: !!(st.fin?.fixas?.length || st.fin?.mov?.length), usaVoz: (Number(st.stats?.voice) || 0) > 0, googleAgenda: !!st.integ?.agenda,
+    };
+    add({ key: `v:${date}:${slot}`, ...voltaPronto(ctx), url: './?v=planejar', tag: 'volta', ia: ctx });
   }
   // 4d. Novidade (uma vez só, entre 10:00 e 21:00, até o fim da semana do anúncio): integrações com o Google.
   const novidade = NOVIDADE;
@@ -324,4 +351,41 @@ export function trialInfo(startDate: string | undefined, now: Date, tz = 'Americ
   const { date } = localNow(now, tz);
   const dia = Math.round((Date.parse(date + 'T12:00:00Z') - Date.parse(startDate + 'T12:00:00Z')) / 864e5);
   return { dia, acabou: dia >= days };
+}
+
+/** Texto pronto do aviso de volta (quando a IA não responde a tempo). */
+export function voltaPronto(c: VoltaCtx): { title: string; body: string } {
+  const n = c.nome ? `${c.nome}, ` : '';
+  const prox = c.hojeAberto[0];
+  if (c.hora === '12h') return {
+    title: `${n}ainda não te vi hoje 👀`,
+    body: prox ? `Hoje tem ${lcFirst(prox.replace(/ \(furou.*\)$/, ''))}. Abre aqui 1 minutinho que eu te ajudo a dar conta.` : 'Me conta o que tem pra hoje que eu organizo pra você em 10 segundos.',
+  };
+  return {
+    title: `${n}cadê você? 👀`,
+    body: prox ? `Ainda tá aberto: ${joinPt(c.hojeAberto.slice(0, 2).map((x) => lcFirst(x.replace(/ \(furou.*\)$/, ''))))}. Bora conferir comigo?` : 'Me conta o que vem amanhã que eu deixo tudo pronto antes de você dormir.',
+  };
+}
+
+/** Pedido à IA para escrever o aviso de volta. */
+export function voltaPrompt(c: VoltaCtx): { system: string; user: string } {
+  return {
+    system: `Você é a Íris, a governanta do Faiz (app de rotina): amiga de uns 23 anos, animada, direta, fala na lata e cobra com humor; público de 16 a 30 anos. Português do Brasil informal.
+Tarefa: escrever UM aviso de celular para a pessoa abrir o Faiz hoje, porque ela ainda não abriu. Use a situação dela (o que tem hoje, o que já usa, o que nunca experimentou, há quantos dias não abre) e termine com um convite concreto e fácil, algo que ela me manda ou faz em 10 segundos.
+Regras: título com no máximo 45 caracteres e no máximo um emoji; texto com no máximo 140 caracteres, sem emoji ou com um. Não invente compromisso que não está na lista. Nunca cite dinheiro. O app se chama Faiz (nunca "Faz"). Bronca bem-humorada só se algo de hoje "furou 3x seguidas" ou mais; senão, animada. Nada de culpa pesada, nada sobre corpo ou família. Às 19h, foque em fechar o dia ou preparar amanhã. Varie o começo (não comece sempre com "Sumiu").
+Responda só com JSON: {"titulo":"...","texto":"..."}`,
+    user: JSON.stringify(c),
+  };
+}
+
+/** Lê a resposta da IA; devolve null se veio fora do formato ou grande demais. */
+export function voltaLer(text: string): { title: string; body: string } | null {
+  const m = String(text || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const title = String(j.titulo || '').trim(), body = String(j.texto || '').trim();
+    if (!title || !body || title.length > 60 || body.length > 180 || /\bFaz\b/.test(title + ' ' + body)) return null;
+    return { title, body };
+  } catch { return null; }
 }
