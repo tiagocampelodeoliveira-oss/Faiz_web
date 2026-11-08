@@ -38,16 +38,20 @@ type Passo = { frase: string; ent?: { topico: string; pergunta: string } };
 const trabTodoDia = { id: 'rtk', title: 'Trabalho', dias: [0, 1, 2, 3, 4, 5, 6], start: 480, end: 1020, category: 'trabalho', color: 'blue', since: L.addDays(hoje, -3), createdAt: 0 };
 const trabSemana = { ...trabTodoDia, id: 'rts', dias: [1, 2, 3, 4, 5] };
 const P = (frase: string, ent?: Passo['ent']): Passo => ({ frase, ent });
-const conversas: { rot: any[]; passos: Passo[] }[] = [
-  { rot: [trabSemana], passos: [P('amanhã saio do trabalho às 6, marca academia depois')] },
-  { rot: [], passos: [P('trabalho de 1 às 5 de segunda a sexta'), P('13h às 17h')] },
-  { rot: [], passos: [P('faculdade de segunda a sexta de 8h as 11h40')] },
+const acadTodo = { id: 'rta', title: 'Academia', dias: [0, 1, 2, 3, 4, 5, 6], start: 1140, end: 1200, category: 'saude', color: 'green', since: L.addDays(hoje, -3), createdAt: 0 };
+const qui = (() => { for (let i = 1; i <= 7; i++) { const d = L.addDays(hoje, i); if (L.parseKey(d).getDay() === 4) return d; } return hoje; })();
+const casamento = { id: 'cas1', title: 'Casamento', date: qui, start: 960, end: 1080, status: 'pendente', category: 'social', color: 'pink', createdAt: 0 };
+const conversas: { rot: any[]; extra?: any[]; passos: Passo[] }[] = [
+  { rot: [acadTodo], extra: [casamento], passos: [P('na quinta pode tirar a academia, pq o casamento vai ser até 23h')] },
+  { rot: [acadTodo], extra: [casamento], passos: [P('o casamento de quinta vai até 23h')] },
+  { rot: [acadTodo], extra: [casamento], passos: [P('tira a academia de quinta')] },
+  { rot: [acadTodo], extra: [casamento], passos: [P('quinta não vou na academia, o casamento começa 16h e vai até tarde, umas 23h')] },
 ];
 for (const conv of conversas) {
   const linhas: string[] = [];
   const recent: { who: 'me' | 'bot'; text: string }[] = [];
-  let routines = conv.rot.slice();
-  let ts = L.materialize([], routines, hoje).tasks;
+  let routines = conv.rot.map((r: any) => ({ ...r, skip: [...(r.skip || [])] }));
+  let ts = [...L.materialize([], routines, hoje).tasks, ...((conv as any).extra || [])];
   for (const { frase, ent } of conv.passos) {
     if (ent) recent.push({ who: 'bot', text: ent.pergunta });
     const ctx = { now: new Date(), tasks: ts, fin, routines, entrevista: ent, recentUser: recent.filter((m) => m.who === 'me').map((m) => m.text).join(' ') };
@@ -61,9 +65,10 @@ for (const conv of conversas) {
       // confirma tudo, como se a pessoa tocasse em Confirmar
       for (const sp of rep.routines || []) { const nr = { id: L.newId('r'), ...sp, since: hoje, createdAt: 0 }; routines = [...routines, nr]; ts = L.materialize(ts, [nr], hoje).tasks; }
       for (const e of rep.routineEdits || []) { if (e.remove) { const x = L.removeRoutine(ts, routines, e.id, hoje); ts = x.tasks; routines = x.routines; } else { const x = L.updateRoutine(ts, routines, e.id, e, hoje); ts = x.tasks; routines = x.routines; } }
-      if (rep.ops?.length) ts = L.applyOps(ts, rep.ops).tasks ?? ts;
+      if (rep.ops?.length) { for (const o of rep.ops) { if (o.type === 'remove') { const t = ts.find((x: any) => x.id === o.id); const r = t?.routine && routines.find((x: any) => x.id === t.routine); if (r) r.skip = [...(r.skip || []), t.date]; } } ts = L.applyOps(ts, rep.ops).tasks; ts = L.materialize(ts, routines, hoje).tasks; }
+      const depois = ts.filter((x: any) => x.date === qui).sort((a: any, b: any) => a.start - b.start).map((x: any) => `${x.title} ${L.timeRange(x.start, x.end)}`).join(', ');
       const tipos = (cmd.acao === 'varios' ? (cmd.comandos || []) : [cmd]).map((c: any) => c.acao).join('+');
-      texto = `[${tipos}] ${rep.text} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} ${rep.plan ? `[plano: ${rep.plan.filter((x: any) => x.isNew).map((x: any) => `${x.title} ${L.fmtTime(x.start)}`).join(', ')}]` : ''} ${rep.entrevista ? `[entrevista: ${rep.entrevista}]` : ''} {rotinas: ${routines.map((x: any) => `${x.title} ${L.diasLabel(x.dias)} ${L.timeRange(x.start, x.end)}`).join('; ') || '-'}}`;
+      texto = `[${tipos}] ${rep.text} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} ${rep.plan ? `[plano: ${rep.plan.filter((x: any) => x.isNew).map((x: any) => `${x.title} ${L.fmtTime(x.start)}`).join(', ')}]` : ''} ${rep.entrevista ? `[entrevista: ${rep.entrevista}]` : ''} {quinta depois: ${depois}} {rotinas: ${routines.map((x: any) => `${x.title} ${L.diasLabel(x.dias)} ${L.timeRange(x.start, x.end)}`).join('; ') || '-'}}`;
       recent.push({ who: 'me', text: frase }, { who: 'bot', text: rep.text });
     } catch (e) { texto = `(resposta fora do formato) ${String(e)} ${String(body.text || JSON.stringify(body)).slice(0, 160)}`; }
     linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
