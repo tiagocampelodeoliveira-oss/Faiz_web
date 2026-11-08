@@ -21,7 +21,7 @@ async function voltaIA(userId: string, n: Notice): Promise<void> {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', signal: AbortSignal.timeout(12000),
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model, max_tokens: 300, system, messages: [{ role: 'user', content: user }] }),
+      body: JSON.stringify({ model, max_tokens: 1200, system, messages: [{ role: 'user', content: user }] }),
     });
     status = res.status;
     if (!res.ok) err = (await res.text().catch(() => '')).slice(0, 200);
