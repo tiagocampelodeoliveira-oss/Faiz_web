@@ -48,11 +48,6 @@ const conversas: { rot: any[]; extra?: any[]; passos: Passo[] }[] = [
   { rot: [redacao, cursinho, acadTodo], passos: [P('o cursinho é coisa de estudo, separa ele do pessoal')] },
   { rot: [redacao, cursinho, acadTodo], passos: [P('deixa a academia junto com as coisas do trabalho, é meu treino de personal')] },
   { rot: [redacao, cursinho, acadTodo], passos: [P('marca aula de redação na sexta das 14 às 15h30')] },
-]; extra?: any[]; passos: Passo[] }[] = [
-  { rot: [acadTodo], extra: [casamento], passos: [P('na quinta pode tirar a academia, pq o casamento vai ser até 23h')] },
-  { rot: [acadTodo], extra: [casamento], passos: [P('o casamento de quinta vai até 23h')] },
-  { rot: [acadTodo], extra: [casamento], passos: [P('tira a academia de quinta')] },
-  { rot: [acadTodo], extra: [casamento], passos: [P('quinta não vou na academia, o casamento começa 16h e vai até tarde, umas 23h')] },
 ];
 for (const conv of conversas) {
   const linhas: string[] = [];
