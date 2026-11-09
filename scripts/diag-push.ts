@@ -64,3 +64,11 @@ const anon = keys.find((k) => k.name === 'anon' || k.type === 'publishable')!.ap
 const conf: any = await (await fetch(`https://${REF}.supabase.co/auth/v1/settings`, { headers: { apikey: anon } })).json();
 const red = await fetch(`https://${REF}.supabase.co/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent('https://tiagocampelodeoliveira-oss.github.io/Faiz_web/')}`, { redirect: 'manual', headers: { apikey: anon } });
 console.log(`::warning::GOOGLE: provedor ${conf?.external?.google ? 'LIGADO' : 'DESLIGADO'} | anônimo ${conf?.external?.anonymous_users ?? '?'} | redireciona para ${(red.headers.get('location') || '').slice(0, 60)} (${red.status})`);
+
+// Erro ao ligar os avisos (só o motivo técnico, nunca conteúdo): pushAsk, reinscrição, aparelho.
+const pa: any[] = await get('states?select=user_id,updated_at,name:data->>name,device:data->stats->>device,ask:data->stats->pushAsk,resub:data->stats->>pushResubErr,ua:data->stats->>ua');
+const erros = pa.filter((x) => x.name).map((x) => {
+  const ss = subs.filter((s) => s.user_id === x.user_id);
+  return `${String(x.name).split(' ')[0]} | ${x.device || '?'} | pedido: ${x.ask ? `${x.ask.resposta} ${x.ask.erro || ''} ${String(x.ask.em || '').slice(0, 16)}` : '-'} | reinscr.erro: ${x.resub || '-'} | inscr: ${ss.map((s) => new URL(s.endpoint).host + ' ' + (s.ua || '').slice(0, 90)).join(' ; ') || 'nenhuma'} | uso ${String(x.updated_at).slice(0, 16)}`;
+});
+console.log(`::warning::ERRO AVISOS: ${erros.join(' ‖ ')}`);
