@@ -69,7 +69,7 @@ if (mpTok) {
     const r = await fetch('https://api.mercadopago.com/preapproval/search?limit=1', { headers: H });
     const j: any = await r.json().catch(() => ({}));
     const pm = await fetch('https://api.mercadopago.com/v1/payment_methods', { headers: H });
-    if (!r.ok) console.log(`::warning::MERCADO PAGO: assinaturas recusaram a chave (${r.status} ${String(j.message || j.error || '').slice(0, 80)}); meios de pagamento: ${pm.status}. Confira o segredo MP_ACCESS_TOKEN (Access Token de produção, começa com APP_USR-).`);
+    if (!r.ok) console.log(`::warning::MERCADO PAGO: assinaturas recusaram a chave (${r.status} ${String(j.message || j.error || '').slice(0, 80)}); meios de pagamento: ${pm.status} ${String(((await pm.json().catch(() => ({}))) as any).message || '').slice(0, 80)}; a chave tem ${mpTok.length} caracteres, começa com "${mpTok.slice(0, 8)}", ${/\s/.test(mpTok) ? 'TEM espaço ou quebra de linha no meio' : 'sem espaços'}. Confira o segredo MP_ACCESS_TOKEN (Access Token de produção, começa com APP_USR-).`);
     else {
       step(`MERCADO PAGO: chave aceita nas assinaturas (${j.paging?.total ?? 0} até agora) · meios de pagamento ${pm.status} · ${mpTok.startsWith('APP_USR-') ? 'formato de produção' : 'formato de teste'}`);
       secrets.push({ name: 'FAIZ_MP_TOKEN', value: mpTok });
