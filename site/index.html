@@ -503,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 09:43';
+const APP_VERSION = '2026-11-10 09:55';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -2325,8 +2325,8 @@ function planosScreen(obrig) {
   el.className = 'planos'; el.id = 'planos'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Planos do Faiz');
   const check = (t) => `<li><i>✓</i><span>${t}</span></li>`;
   const intro = fund
-    ? `Você testou o Faiz desde o começo 💜 Por isso, pra você o Plus sai por <b>${brl2(p.preco)} por mês</b>, enquanto assinar. Quem chegar agora vai pagar R$ 12,99.`
-    : p.plano === 'teste' ? `Você está no teste do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}. Depois, escolhe como continuar.` : 'Seus 7 dias de Plus acabaram. Escolha como continuar:';
+    ? `Você testou o Faiz desde o começo 💜 Por isso, pra você o Plus sai por <b>${brl2(p.preco)} por mês</b>, enquanto assinar (quem chegar agora paga R$ 12,99). Se preferir o Grátis, sua rotina continua, mas sem a minha inteligência.`
+    : p.plano === 'teste' ? `Você está nos 7 dias grátis do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}. Depois, escolhe como continuar.` : 'Seus 7 dias de Plus acabaram. Escolha como continuar:';
   el.innerHTML = `<div class="ptop"><span class="row" style="gap:8px">${LOGO}<b style="font-family:var(--f-display);font-size:22px;color:var(--navy)">faiz</b></span>${obrig ? '' : '<button class="round" type="button" data-pl="fechar" aria-label="Fechar">' + I.x + '</button>'}</div>
     <div class="pwrap">
       <h1>Grátis para organizar. Plus para resolver por você.</h1>
@@ -2343,7 +2343,8 @@ function planosScreen(obrig) {
         <div class="pname">Faiz</div>
         <div class="price">Grátis</div>
         <p class="psub">Para organizar o dia.</p>
-        <ul>${['Avisos, agenda, tarefas e rotinas sem limite', 'Contas: gastos e contas fixas', 'Íris no modo simples, sem IA: entende frases diretas, tipo “corrida amanhã às 7”'].map(check).join('')}</ul>
+        <ul>${['Sua agenda e as rotinas que você já montou continuam', 'Avisos no celular, tarefas e rotinas', 'Contas: anotar gastos e contas fixas', 'Íris no modo simples, sem IA: entende só frases diretas, tipo “corrida amanhã às 7”'].map(check).join('')}</ul>
+        <p class="meta" style="margin:-6px 0 14px">Fica de fora: a Íris com IA, a voz da Íris e o Google.</p>
         <button class="btn soft" type="button" data-pl="gratis">${p.escolha === 'gratis' ? 'Seu plano atual' : 'Continuar no Grátis'}</button>
       </div>
       <p class="pnote">A cobrança ainda não começou. Escolhendo o Plus, você garante esse preço e segue com o Plus liberado de graça até a cobrança começar, em dezembro. Antes de cobrar a gente avisa, e dá para desistir.</p>
