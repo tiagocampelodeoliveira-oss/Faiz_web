@@ -35,7 +35,7 @@ async function escolher(userId: string, plano: unknown, nome: unknown): Promise<
   await rest('planos?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: userId, escolha: plano, preco: antes.preco, fundador: antes.fundador, nome: String(nome || '').slice(0, 40), escolhido_em: new Date().toISOString() }) });
   if (plano === 'plus' && antes.escolha !== 'plus') {
     const n = String(nome || 'Alguém').split(' ')[0].slice(0, 30);
-    await notifyOwners(`owner:plus:${userId}`, { title: `${n} reservou o Plus 🎉`, body: `R$ ${(antes.preco / 100).toFixed(2).replace('.', ',')} por mês${antes.fundador ? ' (preço de fundador)' : ''}. A cobrança começa quando o Mercado Pago for ligado.`, url: './', tag: 'plus' }).catch(() => {});
+    await notifyOwners(`owner:plus:${userId}`, { title: `${n} reservou o Plus 🎉`, body: `R$ ${(antes.preco / 100).toFixed(2).replace('.', ',')} por mês. A cobrança começa quando o Mercado Pago for ligado.`, url: './', tag: 'plus' }).catch(() => {});
   }
   return json({ plano: await planoUser(userId) });
 }

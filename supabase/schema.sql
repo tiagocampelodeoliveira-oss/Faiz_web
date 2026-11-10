@@ -170,3 +170,6 @@ create table if not exists public.planos (
   escolhido_em timestamptz not null default now()
 );
 alter table public.planos enable row level security;
+
+-- 10/11: preço único de R$ 9,90 (as reservas feitas antes, a R$ 9,99, passam para R$ 9,90). Rever se o preço mudar.
+update public.planos set preco = 990 where preco in (999, 1299);

@@ -503,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 09:55';
+const APP_VERSION = '2026-11-10 10:02';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -2302,8 +2302,8 @@ async function clearNotifications() {
 }
 
 /* ---------- Planos: Grátis e Plus ----------
-   Decisão do Tiago (11/11): gente nova tem 7 dias de Plus grátis e depois escolhe Plus (R$ 12,99) ou Grátis;
-   quem já testava escolhe agora: Plus a R$ 9,99 (preço de fundador) ou Grátis. O servidor é quem manda no plano
+   Decisão do Tiago (10/11): gente nova tem 7 dias de Plus grátis e depois escolhe Plus ou Grátis;
+   quem já testava escolhe agora. Preço único de R$ 9,90 por enquanto (pode subir depois). O servidor é quem manda no plano
    (ação "plano"/"escolher"; Grátis = Íris rápida com 5 mensagens por dia, sem voz e sem Google).
    A cobrança ainda não existe: escolher o Plus reserva o preço e segue no Plus de graça até ela começar. */
 const brl2 = (c) => 'R$ ' + (c / 100).toFixed(2).replace('.', ',');
@@ -2325,16 +2325,15 @@ function planosScreen(obrig) {
   el.className = 'planos'; el.id = 'planos'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Planos do Faiz');
   const check = (t) => `<li><i>✓</i><span>${t}</span></li>`;
   const intro = fund
-    ? `Você testou o Faiz desde o começo 💜 Por isso, pra você o Plus sai por <b>${brl2(p.preco)} por mês</b>, enquanto assinar (quem chegar agora paga R$ 12,99). Se preferir o Grátis, sua rotina continua, mas sem a minha inteligência.`
+    ? `Você testou o Faiz desde o começo 💜 Agora você escolhe: o Plus sai por <b>${brl2(p.preco)} por mês</b>. Se preferir o Grátis, sua rotina continua, mas sem a minha inteligência.`
     : p.plano === 'teste' ? `Você está nos 7 dias grátis do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}. Depois, escolhe como continuar.` : 'Seus 7 dias de Plus acabaram. Escolha como continuar:';
   el.innerHTML = `<div class="ptop"><span class="row" style="gap:8px">${LOGO}<b style="font-family:var(--f-display);font-size:22px;color:var(--navy)">faiz</b></span>${obrig ? '' : '<button class="round" type="button" data-pl="fechar" aria-label="Fechar">' + I.x + '</button>'}</div>
     <div class="pwrap">
       <h1>Grátis para organizar. Plus para resolver por você.</h1>
       <div class="pintro">${irisImg('comemorando', 40)}<span>${intro}</span></div>
       <div class="pcard plus">
-        <div class="pname">Faiz Plus<span class="badge">${fund ? 'Preço de fundador' : 'Cobrança só em dezembro'}</span></div>
-        ${fund ? '<div class="old">R$ 12,99</div>' : ''}
-        <div class="price" style="${fund ? 'margin-top:2px' : ''}">${brl2(p.preco)}<small>/mês</small></div>
+        <div class="pname">Faiz Plus<span class="badge">Cobrança só em dezembro</span></div>
+        <div class="price">${brl2(p.preco)}<small>/mês</small></div>
         <p class="psub">Para o Faiz resolver por você.</p>
         <ul>${[ 'Íris com IA: entende do seu jeito e monta rotinas, treinos e cronogramas', 'Até 40 mensagens por dia com a Íris', 'Reorganiza o que ficou atrasado', 'Voz da Íris respondendo em voz alta', 'Google Agenda, Tarefas, Contatos e Gmail', 'Contas e todos os avisos'].map(check).join('')}</ul>
         <button class="btn" type="button" data-pl="plus">${p.escolha === 'plus' ? 'Seu plano atual' : 'Quero o Plus'}</button>
@@ -2740,7 +2739,7 @@ const screens = {
       ${novidadeCard()}
       ${integ('agenda') && S.integ.agendaSoPrincipal && !S.news?.gcals ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Você usa mais de uma agenda no Google?</b> Por enquanto eu só trago a principal. Posso trazer as outras também (escola, trabalho, feriados).</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="gcals-nao">Só a principal</button><button class="pill navy" type="button" data-act="g-ligar" data-v="agenda">Trazer todas</button></div></div>` : ''}
       ${!S.account?.google && S.stats.days.length >= 2 && !S.googleNudge && !novidadeDevida() ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Salva sua conta com o Google?</b> Assim você não perde nada se trocar de celular.</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="google-depois">Depois</button><button class="pill navy" type="button" data-act="google-link">Salvar com Google</button></div></div>` : ''}
-      ${U.plano?.plano === 'teste' && !U.plano.fundador && U.plano.testeDia >= 5 && !U.plano.escolha ? `<button class="card irisline" type="button" data-act="planos">${irisImg('oculos', 44)}<span><b>Seu teste do Plus vai até ${esc(L.ddmm(U.plano.fimTeste))}.</b> Depois você escolhe: Plus por R$ 12,99 ou continuar no Grátis. Toque para ver.</span></button>` : ''}
+      ${U.plano?.plano === 'teste' && !U.plano.fundador && U.plano.testeDia >= 5 && !U.plano.escolha ? `<button class="card irisline" type="button" data-act="planos">${irisImg('oculos', 44)}<span><b>Seu teste do Plus vai até ${esc(L.ddmm(U.plano.fimTeste))}.</b> Depois você escolhe: Plus por ${esc(brl2(U.plano.preco))} por mês ou continuar no Grátis. Toque para ver.</span></button>` : ''}
       ${U.trialOver && !S.trialSeen ? `<button class="card irisline" type="button" data-act="trialok">${irisImg('comemorando', 44)}<span><b>Fechamos os 7 dias! Valeu demais por testar 💜</b> Minha inteligência pausou por enquanto, mas avisos, contas e rotinas continuam. Toque para fechar.</span></button>` : ''}
       ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span>${pesquisaAtrasada() ? `<b>Ainda dá tempo! 🙏</b> Sua opinião é muito importante pro grupo Faiz entender o que já tá bom e o que dá pra melhorar.` : `<b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏`}</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}

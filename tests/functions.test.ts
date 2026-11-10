@@ -379,7 +379,7 @@ test('api: planos — Grátis não tem IA, voz nem Google; escolher o Plus reser
   setNow('2026-11-11T15:00:00Z');
   try {
     let me = await (await post(api, { action: 'me' }, auth)).json();
-    assert.equal(me.plano.plano, 'gratis'); assert.equal(me.plano.fundador, true); assert.equal(me.plano.preco, 999); assert.equal(me.plano.precisaEscolher, true);
+    assert.equal(me.plano.plano, 'gratis'); assert.equal(me.plano.fundador, true); assert.equal(me.plano.preco, 990); assert.equal(me.plano.precisaEscolher, true);
     db.usage = [{ n: 0 }]; models.length = 0;
     const g = await post(api, { action: 'ai', prompt: 'monta meu treino', modelo: 'completa' }, auth);
     assert.equal(g.status, 403); assert.equal((await g.json()).error, 'free_plan');
@@ -388,7 +388,7 @@ test('api: planos — Grátis não tem IA, voz nem Google; escolher o Plus reser
     assert.equal((await post(api, { action: 'gtoken' }, auth)).status, 403);
     // escolhe o Plus: reserva o preço de fundador e volta a ter a Íris completa
     const r = await (await post(api, { action: 'escolher', plano: 'plus', nome: 'Kauã Silva' }, auth)).json();
-    assert.equal(db.planos.length, 1); assert.equal(db.planos[0].escolha, 'plus'); assert.equal(db.planos[0].preco, 999);
+    assert.equal(db.planos.length, 1); assert.equal(db.planos[0].escolha, 'plus'); assert.equal(db.planos[0].preco, 990);
     db.planos = [{ escolha: 'plus' }];
     me = await (await post(api, { action: 'me' }, auth)).json();
     assert.equal(me.plano.plano, 'plus'); assert.equal(me.plano.precisaEscolher, false);
@@ -402,7 +402,7 @@ test('api: planos — Grátis não tem IA, voz nem Google; escolher o Plus reser
     assert.equal(me.plano.plano, 'teste'); assert.equal(me.plano.fundador, true);
     db.states = [{ start: '2026-11-11', tz: 'America/Sao_Paulo' }] as any;
     me = await (await post(api, { action: 'me' }, auth)).json();
-    assert.equal(me.plano.fundador, false); assert.equal(me.plano.preco, 1299); assert.equal(me.plano.precisaEscolher, false); assert.equal(me.plano.fimTeste, '2026-11-17');
+    assert.equal(me.plano.fundador, false); assert.equal(me.plano.preco, 990); assert.equal(me.plano.precisaEscolher, false); assert.equal(me.plano.fimTeste, '2026-11-17');
   } finally { Object.assign(db, antes); }
 });
 
