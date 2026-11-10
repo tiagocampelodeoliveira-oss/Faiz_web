@@ -503,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 12:19';
+const APP_VERSION = '2026-11-10 12:40';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -2328,7 +2328,7 @@ function planosScreen(obrig) {
   const el = document.createElement('div');
   el.className = 'planos'; el.id = 'planos'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Planos do Faiz');
   const check = (t) => `<li><i>✓</i><span>${t}</span></li>`;
-  const intro = soTeste ? `Você ganhou <b>7 dias grátis do Plus</b>${p.fimTeste ? ', até ' + L.ddmm(p.fimTeste) : ''} 🎉 Aproveita tudo. Depois você escolhe entre o Plus e o Grátis.` : p.plano === 'livre' ? `Você está liberada pelo time do Faiz 💜 e foi escolhida para testar o pagamento do Plus (<b>${brl2(p.preco)}</b>). Sua conta continua liberada de qualquer jeito.` : fund
+  const intro = soTeste ? `Você ganhou <b>7 dias grátis do Plus</b>${p.fimTeste ? ', até ' + L.ddmm(p.fimTeste) : ''} 🎉 Aproveita tudo. Depois você escolhe entre o Plus e o Grátis.` : p.plano === 'livre' ? `Você está liberada pelo time do Faiz 💜 e foi escolhida para testar o pagamento do Plus (<b>${brl2(p.preco)}</b>). Sua conta continua liberada de qualquer jeito.` : p.plano === 'teste' ? `Você está nos 7 dias grátis do Plus${p.fimTeste ? ', até ' + L.ddmm(p.fimTeste) : ''}. Quando eles acabarem, você escolhe como continuar. Se quiser, já dá para assinar agora.` : fund
     ? `Você testou o Faiz desde o começo 💜 Agora você escolhe: o Plus sai por <b>${brl2(p.preco)} por mês</b>. Se preferir o Grátis, sua rotina continua, mas sem a minha inteligência.`
     : p.plano === 'teste' ? `Você está nos 7 dias grátis do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}. Depois, escolhe como continuar.` : 'Seus 7 dias de Plus acabaram. Escolha como continuar:';
   el.innerHTML = `<div class="ptop"><span class="row" style="gap:8px">${LOGO}<b style="font-family:var(--f-display);font-size:22px;color:var(--navy)">faiz</b></span>${obrig ? '' : '<button class="round" type="button" data-pl="fechar" aria-label="Fechar">' + I.x + '</button>'}</div>
@@ -2381,12 +2381,11 @@ function planosScreen(obrig) {
     } catch (err) { b.disabled = false; b.textContent = escolha === 'plus' ? 'Quero o Plus' : 'Continuar no Grátis'; toast('Não consegui salvar agora. Confira a internet e tente de novo.'); }
   });
 }
-/** A cada render: a tela de planos é a primeira coisa que aparece (antes do tutorial) para quem precisa escolher ou pagar,
-    e uma vez para gente nova começar os 7 dias grátis. Pedido do Tiago, 10/11. */
+/** A cada render: quando a pessoa completa os 7 dias (testador antigo ou gente nova), a tela de planos é a primeira coisa
+    que aparece, até ela pagar o Plus ou escolher o Grátis. Antes dos 7 dias não aparece sozinha. Pedido do Tiago, 10/11. */
 function planosModo() {
   const p = U.plano; if (!p || !S.onboarded) return null;
   if (p.precisaEscolher) return true;
-  if (p.plano === 'teste' && !p.fundador && !p.pago && !S.planosTeste) return 'teste';
   return null;
 }
 function planosWatch() {
@@ -2894,7 +2893,7 @@ const screens = {
       ${novidadeCard()}
       ${integ('agenda') && S.integ.agendaSoPrincipal && !S.news?.gcals ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Você usa mais de uma agenda no Google?</b> Por enquanto eu só trago a principal. Posso trazer as outras também (escola, trabalho, feriados).</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="gcals-nao">Só a principal</button><button class="pill navy" type="button" data-act="g-ligar" data-v="agenda">Trazer todas</button></div></div>` : ''}
       ${!S.account?.google && S.stats.days.length >= 2 && !S.googleNudge && !novidadeDevida() ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Salva sua conta com o Google?</b> Assim você não perde nada se trocar de celular.</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="google-depois">Depois</button><button class="pill navy" type="button" data-act="google-link">Salvar com Google</button></div></div>` : ''}
-      ${U.plano?.plano === 'teste' && !U.plano.fundador && U.plano.testeDia >= 5 && !U.plano.escolha ? `<button class="card irisline" type="button" data-act="planos">${irisImg('oculos', 44)}<span><b>Seu teste do Plus vai até ${esc(L.ddmm(U.plano.fimTeste))}.</b> Depois você escolhe: Plus por ${esc(brl2(U.plano.preco))} por mês ou continuar no Grátis. Toque para ver.</span></button>` : ''}
+      ${U.plano?.plano === 'teste' && U.plano.testeDia >= 5 && !U.plano.pago ? `<button class="card irisline" type="button" data-act="planos">${irisImg('oculos', 44)}<span><b>Seu teste do Plus vai até ${esc(L.ddmm(U.plano.fimTeste))}.</b> Depois você escolhe: Plus por ${esc(brl2(U.plano.preco))} por mês ou continuar no Grátis. Toque para ver.</span></button>` : ''}
       ${U.trialOver && !S.trialSeen ? `<button class="card irisline" type="button" data-act="trialok">${irisImg('comemorando', 44)}<span><b>Fechamos os 7 dias! Valeu demais por testar 💜</b> Minha inteligência pausou por enquanto, mas avisos, contas e rotinas continuam. Toque para fechar.</span></button>` : ''}
       ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span>${pesquisaAtrasada() ? `<b>Ainda dá tempo! 🙏</b> Sua opinião é muito importante pro grupo Faiz entender o que já tá bom e o que dá pra melhorar.` : `<b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏`}</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}

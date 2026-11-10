@@ -620,6 +620,11 @@ test('cobrança ligada: a tela de planos é obrigatória para quem já testava a
   assert.equal(planoDe({ ...velho, escolha: 'plus', assinatura: { status: 'pix', pix_ate: '2026-12-10' } }).precisaEscolher, false, 'pagou no Pix');
   assert.equal(planoDe({ ...velho, escolha: 'plus', assinatura: { status: 'pix', pix_ate: '2026-11-11' } }).precisaEscolher, true, 'Pix venceu e não renovou: escolhe de novo');
   assert.equal(planoDe({ ...velho, livre: true, escolha: null }).precisaEscolher, false, 'liberada pelo time');
+  // testador que ainda está dentro dos 7 dias (entrou em 8/11): segue no Plus de teste, sem tela, até completar
+  let q = planoDe({ startDate: '2026-11-08', livre: false, tz: 'America/Sao_Paulo', cobrancaDesde: d, escolha: null, now: new Date('2026-11-12T15:00:00Z') });
+  assert.equal(q.plano, 'teste'); assert.equal(q.precisaEscolher, false);
+  q = planoDe({ startDate: '2026-11-08', livre: false, tz: 'America/Sao_Paulo', cobrancaDesde: d, escolha: null, now: new Date('2026-11-15T15:00:00Z') });
+  assert.equal(q.plano, 'gratis'); assert.equal(q.precisaEscolher, true, 'completou os 7 dias: a tela aparece');
   // gente nova (entrou depois de 10/11): 7 dias de Plus sem escolher; no 8º dia a tela vira obrigatória
   const novo = { startDate: '2026-11-11', livre: false, tz: 'America/Sao_Paulo', cobrancaDesde: d, escolha: null };
   let p = planoDe({ ...novo, now: new Date('2026-11-12T15:00:00Z') });

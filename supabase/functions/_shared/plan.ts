@@ -413,10 +413,12 @@ export function planoDe(o: { startDate?: string; escolha?: string | null; escolh
   const plano = o.livre ? 'livre' : pago || reservaVale ? 'plus' : !t.acabou ? 'teste' : 'gratis';
   return {
     plano, fundador, preco: fundador ? PRECO.fundador : PRECO.plus, escolha, testeDia: t.dia, fimTeste,
+    // Regra de 10/11 à noite (decisão do Tiago): a tela de planos só aparece quando a pessoa COMPLETA os 7 dias,
+    // tanto para quem já testava quanto para gente nova. Antes disso, todo mundo usa o Plus de graça (plano "teste").
     // Cobrança desligada: quem ainda não escolheu. Ligada (decisão do Tiago, 10/11): a tela de planos é a primeira coisa
     // que aparece para quem já testava ou já acabou os 7 dias, até a pessoa PAGAR o Plus ou escolher o Grátis
     // (escolha de Grátis feita antes de a cobrança ligar não conta: ela vê a tela mais uma vez).
-    precisaEscolher: !o.livre && ok && !pago && (fundador || t.acabou) && (ligada ? !(escolha === 'gratis' && String(o.escolhidoEm || '').slice(0, 10) >= desde!) : !escolha),
+    precisaEscolher: !o.livre && ok && !pago && t.acabou && (ligada ? !(escolha === 'gratis' && String(o.escolhidoEm || '').slice(0, 10) >= desde!) : !escolha),
     pago, assinatura: a?.status ?? null, proximo: a?.status === 'authorized' ? a?.proximo ?? null : null, ate,
     forma: a?.status === 'authorized' ? 'cartao' : pix ? 'pix' : cartao ? 'cartao' : null,
     cobranca: ligada || !!o.dono, pagarAte,
