@@ -364,6 +364,13 @@ export function trialInfo(startDate: string | undefined, now: Date, tz = 'Americ
    e continua no Plus de graça até a cobrança começar (dezembro). */
 export const FUNDADOR_ATE = '2026-11-10';
 export const PRECO = { fundador: 990, plus: 990 };
+/** Dia em que a cobrança foi ligada (AAAA-MM-DD), ou null = desligada (só o dono pode testar o pagamento).
+ *  Quem reservou o Plus e ainda não pagou fica no Plus por mais PAGAR_DIAS depois de ligar. Cada pessoa paga a partir do dia
+ *  em que confirma o pagamento (decisão do Tiago, 10/11). */
+export const COBRANCA_DESDE: string | null = null;
+export const PAGAR_DIAS = 7;
+/** Assinatura no Mercado Pago (tabela assinaturas): status do MP e até quando já está pago (se cancelou). */
+export type Assinatura = { status: string; ate?: string | null; proximo?: string | null };
 export type PlanoInfo = {
   plano: 'livre' | 'plus' | 'teste' | 'gratis';
   fundador: boolean;
@@ -372,15 +379,37 @@ export type PlanoInfo = {
   testeDia: number;
   fimTeste: string | null;
   precisaEscolher: boolean;
+  /** pagou de verdade (assinatura ativa no Mercado Pago, ou cancelada mas ainda dentro do mês pago) */
+  pago: boolean;
+  /** status no Mercado Pago (pending, authorized, paused, cancelled) ou null */
+  assinatura: string | null;
+  proximo: string | null;
+  ate: string | null;
+  /** o app pode mostrar o botão de pagar (cobrança ligada, ou dono testando) */
+  cobranca: boolean;
+  /** reservou o Plus e precisa pagar até esta data para continuar (só com a cobrança ligada) */
+  pagarAte: string | null;
 };
-export function planoDe(o: { startDate?: string; escolha?: string | null; livre: boolean; now: Date; tz?: string }): PlanoInfo {
+export function planoDe(o: { startDate?: string; escolha?: string | null; livre: boolean; now: Date; tz?: string; assinatura?: Assinatura | null; cobrancaDesde?: string | null; dono?: boolean }): PlanoInfo {
   const t = trialInfo(o.startDate, o.now, o.tz || 'America/Sao_Paulo');
+  const hoje = localNow(o.now, o.tz || 'America/Sao_Paulo').date;
   const ok = !!o.startDate && /^\d{4}-\d{2}-\d{2}$/.test(o.startDate);
   const fundador = ok && o.startDate! <= FUNDADOR_ATE;
   const escolha = o.escolha === 'plus' || o.escolha === 'gratis' ? o.escolha : null;
   const fimTeste = ok ? new Date(Date.parse(o.startDate + 'T12:00:00Z') + (TRIAL_DAYS - 1) * 864e5).toISOString().slice(0, 10) : null;
-  const plano = o.livre ? 'livre' : escolha === 'plus' ? 'plus' : !t.acabou ? 'teste' : 'gratis';
-  return { plano, fundador, preco: fundador ? PRECO.fundador : PRECO.plus, escolha, testeDia: t.dia, fimTeste, precisaEscolher: !o.livre && ok && !escolha && (fundador || t.acabou) };
+  const a = o.assinatura || null;
+  const desde = o.cobrancaDesde === undefined ? COBRANCA_DESDE : o.cobrancaDesde;
+  const ligada = !!desde && desde <= hoje;
+  const pago = !!a && (a.status === 'authorized' || (!!a.ate && a.ate >= hoje));
+  const pagarAte = ligada && escolha === 'plus' && !pago ? new Date(Date.parse(desde + 'T12:00:00Z') + PAGAR_DIAS * 864e5).toISOString().slice(0, 10) : null;
+  const reservaVale = escolha === 'plus' && (!ligada || (pagarAte !== null && hoje <= pagarAte));
+  const plano = o.livre ? 'livre' : pago || reservaVale ? 'plus' : !t.acabou ? 'teste' : 'gratis';
+  return {
+    plano, fundador, preco: fundador ? PRECO.fundador : PRECO.plus, escolha, testeDia: t.dia, fimTeste,
+    precisaEscolher: !o.livre && ok && !escolha && !pago && (fundador || t.acabou),
+    pago, assinatura: a?.status ?? null, proximo: a?.proximo ?? null, ate: a?.ate ?? null,
+    cobranca: ligada || !!o.dono, pagarAte,
+  };
 }
 
 /** Texto pronto do aviso de volta (quando a IA não responde a tempo). */

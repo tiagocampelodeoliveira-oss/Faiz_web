@@ -73,6 +73,17 @@ if (mpTok) {
     else {
       step(`MERCADO PAGO: chave aceita nas assinaturas (${j.paging?.total ?? 0} até agora) · meios de pagamento ${pm.status} · ${mpTok.startsWith('APP_USR-') ? 'formato de produção' : 'formato de teste'}`);
       secrets.push({ name: 'FAIZ_MP_TOKEN', value: mpTok });
+      // Só quando o commit traz [mp-teste]: cria uma assinatura de teste (ninguém paga) e cancela na hora, para conferir o formato.
+      if (process.env.MP_TESTE === 'true') {
+        const c = await fetch('https://api.mercadopago.com/preapproval', { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Faiz Plus', external_reference: 'teste-do-deploy', payer_email: 'teste@example.com', back_url: SITE_URL + '?v=assinatura', status: 'pending', auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 9.9, currency_id: 'BRL' } }) });
+        const cj: any = await c.json().catch(() => ({}));
+        if (!c.ok || !cj.id) console.log(`::warning::MP TESTE: criar assinatura falhou (${c.status} ${String(cj.message || cj.error || '').slice(0, 160)})`);
+        else {
+          const x = await fetch(`https://api.mercadopago.com/preapproval/${cj.id}`, { method: 'PUT', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) });
+          const xj: any = await x.json().catch(() => ({}));
+          step(`MP TESTE: assinatura criada (status ${cj.status}, link ${String(cj.init_point || '').startsWith('https://www.mercadopago.com.br/') ? 'ok' : 'FALTOU'}, valor ${cj.auto_recurring?.transaction_amount} ${cj.auto_recurring?.currency_id}, referência ${cj.external_reference === 'teste-do-deploy' ? 'ok' : 'FALTOU'}) e cancelada (${x.status} ${xj.status || String(xj.message || '').slice(0, 80)})`);
+        }
+      }
     }
   } catch (e) { console.log(`::warning::MERCADO PAGO: não consegui falar com a API (${(e as Error).message}).`); }
 } else console.log('::warning::MERCADO PAGO: o segredo MP_ACCESS_TOKEN não chegou (vazio).');

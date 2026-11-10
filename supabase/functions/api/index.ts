@@ -4,6 +4,7 @@ import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
 import { falar, ttsLigado } from '../_shared/tts.ts';
 import { localNow, planoDe, type PlanoInfo } from '../_shared/plan.ts';
+import { corpoAssinatura, lerAssinatura, mp, mpToken } from '../_shared/mp.ts';
 import { aplicarAcao, confere, segredoAcoes } from '../_shared/acoes.ts';
 import { buildIcs } from '../_shared/ics.ts';
 
@@ -17,14 +18,84 @@ async function semLimite(userId: string): Promise<boolean> {
   return !!(o?.length || u?.length);
 }
 
-/** Plano da pessoa (Grátis, Plus, teste de 7 dias ou liberada). */
+/** Plano da pessoa (Grátis, Plus, teste de 7 dias ou liberada), já com a assinatura do Mercado Pago. */
 async function planoUser(userId: string): Promise<PlanoInfo> {
-  const [livre, row, esc] = await Promise.all([
+  const [livre, row, esc, ass, dono] = await Promise.all([
     semLimite(userId),
     rest(`states?user_id=eq.${userId}&select=start:data->>startDate,tz:data->settings->>tz`).then((r: any) => r?.[0]),
     rest(`planos?user_id=eq.${userId}&select=escolha`).then((r: any) => r?.[0]?.escolha ?? null).catch(() => null),
+    rest(`assinaturas?user_id=eq.${userId}&select=status,ate,proximo`).then((r: any) => r?.[0] ?? null).catch(() => null),
+    rest(`owners?user_id=eq.${userId}&select=user_id`).then((r: any) => !!r?.length).catch(() => false),
   ]);
-  return planoDe({ startDate: row?.start, escolha: esc, livre, now: new Date(), tz: row?.tz || 'America/Sao_Paulo' });
+  return planoDe({ startDate: row?.start, escolha: esc, livre, now: new Date(), tz: row?.tz || 'America/Sao_Paulo', assinatura: ass, dono });
+}
+
+/* ---------- Assinatura no Mercado Pago ---------- */
+const SITE = () => (Deno.env.get('FAIZ_SITE_URL') || '').replace(/\/?$/, '/');
+
+/** Cria a assinatura e devolve o link de pagamento do Mercado Pago. Precisa do e-mail da conta (Salvar com Google). */
+async function assinar(user: { id: string; email?: string }, nome: unknown): Promise<Response> {
+  if (!mpToken()) return json({ error: 'mp_off' }, 503);
+  const pl = await planoUser(user.id);
+  if (!pl.cobranca) return json({ error: 'cobranca_off' }, 403);
+  if (pl.assinatura === 'authorized') return json({ ja: true, plano: pl });
+  if (!user.email) return json({ error: 'precisa_google' }, 409);
+  const pre = await mp('/preapproval', { method: 'POST', body: JSON.stringify(corpoAssinatura({ userId: user.id, email: user.email, preco: pl.preco, volta: SITE() + '?v=assinatura' })) });
+  if (!pre?.init_point) throw new Error('mp sem link de pagamento');
+  const a = lerAssinatura(pre);
+  await rest('assinaturas?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: user.id, mp_id: a.mp_id, status: a.status, valor: a.valor ?? pl.preco, proximo: a.proximo, ate: a.ate, pagas: a.pagas, nome: String(nome || '').slice(0, 40), criado_em: new Date().toISOString(), conferido_em: new Date().toISOString() }) });
+  return json({ url: pre.init_point });
+}
+
+/** Confere no Mercado Pago e grava. Avisa o dono quando alguém passa a pagar ou cancela. */
+async function sincroniza(userId: string, preDado?: any): Promise<void> {
+  const [row] = (await rest(`assinaturas?user_id=eq.${userId}&select=mp_id,status,nome`).catch(() => [])) || [];
+  let pre = preDado;
+  if (!pre) {
+    if (row?.mp_id) pre = await mp(`/preapproval/${encodeURIComponent(row.mp_id)}`);
+    else {
+      const r = await mp(`/preapproval/search?external_reference=${encodeURIComponent(userId)}&limit=5`);
+      pre = (r?.results || []).sort((x: any, y: any) => String(y.date_created).localeCompare(String(x.date_created)))[0];
+    }
+  }
+  if (!pre || String(pre.external_reference || '') !== userId) return;
+  const a = lerAssinatura(pre);
+  await rest('assinaturas?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: userId, mp_id: a.mp_id, status: a.status, valor: a.valor, proximo: a.proximo, ate: a.ate, pagas: a.pagas, conferido_em: new Date().toISOString() }) });
+  if (row?.status !== a.status && (a.status === 'authorized' || a.status === 'cancelled')) {
+    if (a.status === 'authorized') await rest('planos?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: userId, escolha: 'plus', escolhido_em: new Date().toISOString() }) }).catch(() => {});
+    const n = String(row?.nome || 'Alguém').split(' ')[0].slice(0, 30);
+    await notifyOwners(`owner:mp:${a.status}:${userId}:${a.pagas}`, a.status === 'authorized'
+      ? { title: `${n} assinou o Plus 💰`, body: `Pagamento confirmado no Mercado Pago (R$ ${((a.valor ?? 990) / 100).toFixed(2).replace('.', ',')} por mês).`, url: './', tag: 'mp' }
+      : { title: `${n} cancelou o Plus`, body: a.ate ? `Continua no Plus até ${a.ate.split('-').reverse().slice(0, 2).join('/')}.` : 'Volta para o Grátis.', url: './', tag: 'mp' }).catch(() => {});
+  }
+}
+
+/** Cancela no Mercado Pago. Quem já pagou continua no Plus até o fim do mês pago. */
+async function cancelar(userId: string): Promise<Response> {
+  const [row] = (await rest(`assinaturas?user_id=eq.${userId}&select=mp_id,status`)) || [];
+  if (!row?.mp_id) return json({ error: 'sem_assinatura' }, 404);
+  if (row.status !== 'cancelled') {
+    const pre = await mp(`/preapproval/${encodeURIComponent(row.mp_id)}`, { method: 'PUT', body: JSON.stringify({ status: 'cancelled' }) });
+    await sincroniza(userId, pre?.external_reference ? pre : undefined);
+  }
+  return json({ plano: await planoUser(userId) });
+}
+
+/** Aviso do Mercado Pago (webhook). Não confia no corpo: busca a assinatura no Mercado Pago pela chave do Faiz. */
+async function webhookMp(body: Record<string, any>, url: URL): Promise<Response> {
+  try {
+    const tipo = String(body.type || body.topic || url.searchParams.get('type') || url.searchParams.get('topic') || '');
+    const id = String(body.data?.id || url.searchParams.get('data.id') || url.searchParams.get('id') || '');
+    if (!id || !/^[\w-]{1,64}$/.test(id)) return json({ ok: true });
+    let pre: any = null;
+    if (tipo.includes('authorized_payment')) {
+      const pay = await mp(`/authorized_payments/${id}`);
+      if (pay?.preapproval_id) pre = await mp(`/preapproval/${encodeURIComponent(pay.preapproval_id)}`);
+    } else if (tipo.includes('preapproval')) pre = await mp(`/preapproval/${encodeURIComponent(id)}`);
+    const uid = String(pre?.external_reference || '');
+    if (/^[0-9a-f-]{36}$/.test(uid)) await sincroniza(uid, pre);
+  } catch (e) { console.error('mp webhook', e); }
+  return json({ ok: true }); // sempre 200, senão o Mercado Pago fica reenviando
 }
 
 /** A pessoa escolhe o plano. Plus = reserva do preço (a cobrança ainda não existe) e avisa o dono. */
@@ -317,6 +388,8 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'method' }, 405);
   let body: Record<string, any> = {};
   try { body = await req.json(); } catch { /* corpo vazio */ }
+  const reqUrl = new URL(req.url);
+  if (reqUrl.searchParams.get('mp') === 'aviso') return await webhookMp(body, reqUrl);
   const action = String(body.action || '');
   try {
     if (action === 'config') {
@@ -329,6 +402,9 @@ Deno.serve(async (req) => {
     if (action === 'acoes') return await acoesPendentes(user.id);
     if (action === 'plano') return json({ plano: await planoUser(user.id) });
     if (action === 'escolher') return await escolher(user.id, body.plano, body.nome);
+    if (action === 'assinar') return await assinar(user, body.nome);
+    if (action === 'assinatura') { if (mpToken()) await sincroniza(user.id).catch((e) => console.error('sync', e)); return json({ plano: await planoUser(user.id) }); }
+    if (action === 'cancelar') return await cancelar(user.id);
     if (action === 'ai') return await ai(user.id, body.prompt, body.system, body.modelo);
     if (action === 'subscribe') return await subscribe(user.id, body.subscription, req.headers.get('user-agent') || '');
     if (action === 'test') return await testPush(user.id);
@@ -364,6 +440,11 @@ Deno.serve(async (req) => {
       }
     }
     if (action === 'me') {
+      // confere a assinatura no Mercado Pago de vez em quando (o aviso do Mercado Pago pode não ter chegado)
+      if (mpToken()) {
+        const [a] = (await rest(`assinaturas?user_id=eq.${user.id}&select=conferido_em,status`).catch(() => [])) || [];
+        if (a && Date.now() - Date.parse(a.conferido_em || 0) > (a.status === 'pending' ? 10 * 60e3 : 6 * 3600e3)) await sincroniza(user.id).catch((e) => console.error('sync', e));
+      }
       const plano = await planoUser(user.id);
       // trialOver fica para versões antigas do app (elas pausam a IA); a nova usa o plano
       return json({ owner: !!(await rest(`owners?user_id=eq.${user.id}&select=user_id`))?.length, aiCredit: !(await aiCreditEmpty()), trialOver: plano.plano === 'gratis', plano });

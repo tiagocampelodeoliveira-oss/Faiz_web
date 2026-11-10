@@ -31,13 +31,15 @@ export async function rest(path: string, init: RequestInit = {}): Promise<any> {
 }
 
 /** Quem está chamando (pelo token do app). */
-export async function getUser(req: Request): Promise<{ id: string } | null> {
+export async function getUser(req: Request): Promise<{ id: string; email?: string } | null> {
   const auth = req.headers.get('Authorization') || '';
   if (!auth.startsWith('Bearer ')) return null;
   const res = await fetch(`${URL_}/auth/v1/user`, { headers: { apikey: ANON, Authorization: auth } });
   if (!res.ok) return null;
   const u = await res.json();
-  return u?.id ? { id: u.id } : null;
+  // e-mail da conta (Salvar com Google); conta anônima ligada ao Google pode trazer o e-mail só na identidade
+  const em = [u?.email, ...(Array.isArray(u?.identities) ? u.identities.map((i: any) => i?.identity_data?.email) : [])].find((e) => typeof e === 'string' && e.includes('@'));
+  return u?.id ? { id: u.id, email: em } : null;
 }
 
 /** Endereço da função api e chave pública (vão no aviso para os botões Feito/Adiar falarem com o servidor). */

@@ -15,6 +15,8 @@ const pushLog: any[] = await get(`push_log?select=user_id,at,kind,status,ok,gone
 const livres = new Set(((await get('unlimited?select=user_id')) as any[]).map((o) => o.user_id));
 const aiLog: any[] = await get(`ai_log?select=at,status,stop,ms,out_tokens,model&at=gte.${new Date(Date.now() - 14 * 864e5).toISOString()}&order=at.desc&limit=5000`);
 const planosRows: any = await get('planos?select=user_id,escolha,preco,escolhido_em');
+const assRows: any = await get('assinaturas?select=user_id,status,pagas,proximo,ate');
+const assin = new Map((Array.isArray(assRows) ? assRows : []).map((x) => [x.user_id, x]));
 const planos = new Map((Array.isArray(planosRows) ? planosRows : []).map((x) => [x.user_id, x]));
 const subs = new Set(((await get('subs?select=user_id')) as any[]).map((s) => s.user_id));
 const reports: any[] = await get('reports?select=user_id,text,ctx,created_at&order=created_at.asc');
@@ -74,6 +76,7 @@ const pessoas = states
       plano: livres.has(s.user_id) || owners.has(s.user_id) ? 'liberado' : planos.get(s.user_id)?.escolha || 'ainda não escolheu',
       precoReservado: planos.get(s.user_id)?.escolha === 'plus' ? planos.get(s.user_id).preco / 100 : null,
       planoEm: planos.get(s.user_id)?.escolhido_em || null,
+      assinatura: assin.get(s.user_id) ? { status: assin.get(s.user_id).status, mensalidadesPagas: assin.get(s.user_id).pagas, proxima: assin.get(s.user_id).proximo, ate: assin.get(s.user_id).ate } : null,
       iaPorModelo: st.iaModelo || {},
       edicoes: st.edits || 0,
       criadosDireto: st.direto || 0,

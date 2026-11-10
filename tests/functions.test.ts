@@ -51,7 +51,10 @@ const db = {
   manual_push: [] as any[],
   push_actions: [] as any[],
   planos: [] as any[],
+  assinaturas: [] as any[],
 };
+const mpCalls: { method: string; path: string; body: any }[] = [];
+let mpPre: any = null;
 const pushed: any[] = [];
 let pushStatus = 201;
 let anthropicBody: any = null;
@@ -86,7 +89,18 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
       { type: 'node', lat: -23.5520, lon: -46.6350, tags: {} },
     ] });
   }
-  if (url.pathname === '/auth/v1/user') return (init.headers as any).Authorization === 'Bearer user-token' ? Response.json({ id: U }) : new Response('{}', { status: 401 });
+  if (url.host === 'api.mercadopago.com') {
+    const body = init.body ? JSON.parse(String(init.body)) : null;
+    mpCalls.push({ method, path: url.pathname + url.search, body });
+    if ((init.headers as any).Authorization !== 'Bearer APP_USR-teste') return Response.json({ message: 'invalid_token' }, { status: 401 });
+    if (method === 'POST' && url.pathname === '/preapproval') { mpPre = { id: 'pre1', status: 'pending', init_point: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=pre1', external_reference: body.external_reference, auto_recurring: body.auto_recurring, summarized: { charged_quantity: 0 } }; return Response.json(mpPre, { status: 201 }); }
+    if (method === 'PUT' && url.pathname === '/preapproval/pre1') { mpPre = { ...mpPre, ...body, next_payment_date: null }; return Response.json(mpPre); }
+    if (url.pathname === '/preapproval/pre1') return mpPre ? Response.json(mpPre) : Response.json({ message: 'not found' }, { status: 404 });
+    if (url.pathname === '/preapproval/search') return Response.json({ results: mpPre ? [mpPre] : [] });
+    if (url.pathname === '/authorized_payments/pay9') return Response.json({ id: 'pay9', preapproval_id: 'pre1', status: 'processed' });
+    return Response.json({ message: 'not found' }, { status: 404 });
+  }
+  if (url.pathname === '/auth/v1/user') { const a = (init.headers as any).Authorization; return a === 'Bearer user-token' ? Response.json({ id: U }) : a === 'Bearer user-mail' ? Response.json({ id: U, email: 'kaua@gmail.com' }) : new Response('{}', { status: 401 }); }
   const table = url.pathname.replace('/rest/v1/', '') as keyof typeof db;
   assert.equal((init.headers as any).apikey, 'service-jwt', 'servidor usa a chave de serviço');
   if (method === 'GET' && table === 'manual_push') return Response.json(db.manual_push.filter((m: any) => !m.sent_at && m.send_at <= String(url.searchParams.get('send_at')).slice(4)));
@@ -112,6 +126,8 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
 const realNow = Date.now;
 const setNow = (iso: string) => { const t = new Date(iso).getTime(); Date.now = () => t; (globalThis as any).Date = class extends Date { constructor(...a: any[]) { super(...(a.length ? a : [t])); } static now() { return t; } } as any; };
 
+import { planoDe } from '../supabase/functions/_shared/plan.ts';
+import { lerAssinatura } from '../supabase/functions/_shared/mp.ts';
 await import('../supabase/functions/tick/index.ts');
 const tick = handler;
 await import('../supabase/functions/api/index.ts');
@@ -434,4 +450,80 @@ test('api: calendário assinado foi retirado — quem assinou recebe um calendá
   assert.equal((await post(api, { action: 'calstop' }, auth)).status, 200);
   assert.equal(db.cal_feeds.length, 0);
   assert.match(buildIcsT({ tasks: [{ id: 'x', title: 'a;b', date: new Date().toISOString().slice(0, 10) }] }), /SUMMARY:a\\;b/);
+});
+
+test('planos com cobrança: reserva vale até 7 dias depois de ligar; quem paga fica no Plus; cancelado vale até o fim do mês pago', () => {
+  const n = new Date('2026-12-03T15:00:00Z');
+  const base = { startDate: '2026-11-01', livre: false, now: n, tz: 'America/Sao_Paulo' };
+  // cobrança desligada: reserva = Plus, sem botão de pagar (só o dono)
+  let p = planoDe({ ...base, escolha: 'plus', cobrancaDesde: null });
+  assert.equal(p.plano, 'plus'); assert.equal(p.cobranca, false); assert.equal(p.pagarAte, null);
+  assert.equal(planoDe({ ...base, escolha: 'plus', cobrancaDesde: null, dono: true }).cobranca, true);
+  // ligada em 1/12: reservou e não pagou → Plus até 8/12, depois Grátis
+  p = planoDe({ ...base, escolha: 'plus', cobrancaDesde: '2026-12-01' });
+  assert.equal(p.plano, 'plus'); assert.equal(p.cobranca, true); assert.equal(p.pagarAte, '2026-12-08');
+  p = planoDe({ ...base, now: new Date('2026-12-09T15:00:00Z'), escolha: 'plus', cobrancaDesde: '2026-12-01' });
+  assert.equal(p.plano, 'gratis'); assert.equal(p.precisaEscolher, false);
+  // pagou: Plus, sem prazo
+  p = planoDe({ ...base, now: new Date('2026-12-20T15:00:00Z'), escolha: 'plus', cobrancaDesde: '2026-12-01', assinatura: { status: 'authorized', proximo: '2027-01-05' } });
+  assert.equal(p.plano, 'plus'); assert.equal(p.pago, true); assert.equal(p.pagarAte, null); assert.equal(p.proximo, '2027-01-05');
+  // cancelou depois de pagar: Plus até a data paga
+  const a = { status: 'cancelled', ate: '2027-01-05' };
+  assert.equal(planoDe({ ...base, now: new Date('2027-01-05T15:00:00Z'), escolha: 'plus', cobrancaDesde: '2026-12-01', assinatura: a }).plano, 'plus');
+  assert.equal(planoDe({ ...base, now: new Date('2027-01-06T15:00:00Z'), escolha: 'plus', cobrancaDesde: '2026-12-01', assinatura: a }).plano, 'gratis');
+  // pagou sem ter escolhido antes (gente nova): não pede para escolher
+  assert.equal(planoDe({ ...base, escolha: null, cobrancaDesde: '2026-12-01', assinatura: { status: 'authorized' } }).precisaEscolher, false);
+  // leitura do Mercado Pago
+  const l = lerAssinatura({ id: 'x', status: 'cancelled', next_payment_date: '2027-01-05T10:00:00.000-03:00', summarized: { charged_quantity: 1, last_charged_date: '2026-12-05T10:00:00.000-03:00' }, auto_recurring: { transaction_amount: 9.9 } });
+  assert.equal(l.ate, '2027-01-05'); assert.equal(l.valor, 990); assert.equal(l.proximo, null);
+  assert.equal(lerAssinatura({ id: 'y', status: 'cancelled', summarized: { charged_quantity: 0 } }).ate, null, 'cancelou sem pagar: nada a valer');
+});
+
+test('api: assinatura no Mercado Pago — cria, confere pelo aviso, cancela; nunca confia no corpo do aviso', async () => {
+  const auth = { Authorization: 'Bearer user-token', apikey: 'anon' }, authMail = { Authorization: 'Bearer user-mail', apikey: 'anon' };
+  const antes = { states: db.states, unlimited: db.unlimited, planos: db.planos, owners: db.owners, assinaturas: db.assinaturas, subs: db.subs, sent: db.sent };
+  db.unlimited = []; db.planos = []; db.owners = []; db.assinaturas = []; mpCalls.length = 0; mpPre = null;
+  db.states = [{ start: '2026-11-01', tz: 'America/Sao_Paulo' }] as any;
+  setNow('2026-11-11T15:00:00Z');
+  try {
+    assert.equal((await (await post(api, { action: 'assinar' }, authMail)).json()).error, 'mp_off');
+    env.FAIZ_MP_TOKEN = 'APP_USR-teste';
+    const off = await post(api, { action: 'assinar' }, authMail);
+    assert.equal(off.status, 403); assert.equal((await off.json()).error, 'cobranca_off', 'cobrança desligada: só o dono testa');
+    db.owners = [{ user_id: U }];
+    const sem = await post(api, { action: 'assinar' }, auth);
+    assert.equal(sem.status, 409); assert.equal((await sem.json()).error, 'precisa_google');
+    const r = await (await post(api, { action: 'assinar', nome: 'Kauã Silva' }, authMail)).json();
+    assert.match(r.url, /mercadopago\.com\.br\/subscriptions\/checkout/);
+    const cria = mpCalls.find((c) => c.method === 'POST')!;
+    assert.equal(cria.body.payer_email, 'kaua@gmail.com'); assert.equal(cria.body.external_reference, U);
+    assert.equal(cria.body.auto_recurring.transaction_amount, 9.9); assert.equal(cria.body.auto_recurring.currency_id, 'BRL');
+    assert.equal(cria.body.back_url, 'https://x.github.io/Faiz_web/?v=assinatura');
+    assert.ok(!('start_date' in cria.body.auto_recurring), 'cobra a partir do dia em que a pessoa paga');
+    assert.equal(db.assinaturas.at(-1).status, 'pending'); assert.equal(db.assinaturas.at(-1).mp_id, 'pre1');
+    // a pessoa paga: chega o aviso do Mercado Pago (só o id); o servidor busca a assinatura lá
+    db.assinaturas = [{ mp_id: 'pre1', status: 'pending', nome: 'Kauã Silva' }];
+    mpPre = { ...mpPre, status: 'authorized', next_payment_date: '2026-12-11T10:00:00.000-03:00', summarized: { charged_quantity: 1, last_charged_date: '2026-11-11T10:00:00.000-03:00' } };
+    const wh = await api(new Request('https://proj.supabase.co/functions/v1/api?mp=aviso', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'subscription_authorized_payment', data: { id: 'pay9' } }) }));
+    assert.equal(wh.status, 200);
+    const pago = db.assinaturas.at(-1);
+    assert.equal(pago.status, 'authorized'); assert.equal(pago.proximo, '2026-12-11'); assert.equal(pago.pagas, 1);
+    assert.ok(db.planos.some((x: any) => x.escolha === 'plus'), 'quem pagou fica com o Plus escolhido');
+    // aviso falso (outra pessoa no external_reference): ignorado
+    mpPre = { ...mpPre, external_reference: '22222222-2222-2222-2222-222222222222' };
+    const n0 = db.assinaturas.length;
+    await api(new Request('https://proj.supabase.co/functions/v1/api?mp=aviso', { method: 'POST', body: JSON.stringify({ type: 'subscription_preapproval', data: { id: 'pre1' } }) }));
+    assert.ok(db.assinaturas.slice(n0).every((x: any) => x.user_id === '22222222-2222-2222-2222-222222222222'), 'grava só para a pessoa que o Mercado Pago diz, nunca para outra');
+    mpPre = { ...mpPre, external_reference: U };
+    // sem dono: quem pagou está no Plus pago
+    db.owners = []; db.planos = [{ escolha: 'plus' }]; db.assinaturas = [{ mp_id: 'pre1', status: 'authorized', proximo: '2026-12-11', conferido_em: new Date().toISOString() }];
+    let me = await (await post(api, { action: 'me' }, auth)).json();
+    assert.equal(me.plano.plano, 'plus'); assert.equal(me.plano.pago, true); assert.equal(me.plano.proximo, '2026-12-11');
+    // cancela: o Mercado Pago recebe o pedido; continua pago até 11/12
+    mpCalls.length = 0;
+    const c = await post(api, { action: 'cancelar' }, auth);
+    assert.equal(c.status, 200);
+    assert.deepEqual(mpCalls.filter((x) => x.method === 'PUT').map((x) => [x.path, x.body.status]), [['/preapproval/pre1', 'cancelled']]);
+    assert.equal(db.assinaturas.at(-1).status, 'cancelled'); assert.equal(db.assinaturas.at(-1).ate, '2026-12-11');
+  } finally { delete env.FAIZ_MP_TOKEN; Object.assign(db, antes); mpPre = null; }
 });

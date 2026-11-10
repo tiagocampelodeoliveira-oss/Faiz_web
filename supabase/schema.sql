@@ -173,3 +173,18 @@ alter table public.planos enable row level security;
 
 -- 10/11: preço único de R$ 9,90 (as reservas feitas antes, a R$ 9,99, passam para R$ 9,90). Rever se o preço mudar.
 update public.planos set preco = 990 where preco in (999, 1299);
+
+-- Assinatura do Plus no Mercado Pago (uma por pessoa). Só status e datas, nunca dados de cartão. Só o servidor.
+create table if not exists public.assinaturas (
+  user_id uuid primary key references auth.users on delete cascade,
+  mp_id text,
+  status text not null default 'pending',
+  valor int,
+  proximo date,
+  ate date,
+  pagas int not null default 0,
+  nome text,
+  criado_em timestamptz not null default now(),
+  conferido_em timestamptz not null default now()
+);
+alter table public.assinaturas enable row level security;
