@@ -159,3 +159,14 @@ create table if not exists public.push_actions (
 );
 create index if not exists push_actions_user on public.push_actions (user_id) where applied_at is null;
 alter table public.push_actions enable row level security;
+
+-- Plano escolhido por pessoa (Grátis ou Plus). Enquanto a cobrança não existe, "plus" = preço reservado. Só o servidor.
+create table if not exists public.planos (
+  user_id uuid primary key references auth.users on delete cascade,
+  escolha text not null,
+  preco int,
+  fundador boolean,
+  nome text,
+  escolhido_em timestamptz not null default now()
+);
+alter table public.planos enable row level security;

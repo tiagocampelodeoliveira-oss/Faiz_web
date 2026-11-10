@@ -357,6 +357,33 @@ export function trialInfo(startDate: string | undefined, now: Date, tz = 'Americ
   return { dia, acabou: dia >= days };
 }
 
+/* ---------- Planos (decisão do Tiago, 11/11) ----------
+   Grátis: Íris rápida com 5 mensagens por dia, Contas, avisos, agenda, tarefas e rotinas.
+   Plus: Íris completa, voz da Thalita e Google. Quem entrou até 10/11 é "fundador": R$ 9,99; depois, R$ 12,99.
+   Gente nova tem 7 dias de Plus grátis (o teste). Enquanto a cobrança não existe, quem escolhe o Plus "reserva" o preço
+   e continua no Plus de graça até a cobrança começar (dezembro). */
+export const FUNDADOR_ATE = '2026-11-10';
+export const PRECO = { fundador: 999, plus: 1299 };
+export const GRATIS_POR_DIA = 5;
+export type PlanoInfo = {
+  plano: 'livre' | 'plus' | 'teste' | 'gratis';
+  fundador: boolean;
+  preco: number;
+  escolha: 'plus' | 'gratis' | null;
+  testeDia: number;
+  fimTeste: string | null;
+  precisaEscolher: boolean;
+};
+export function planoDe(o: { startDate?: string; escolha?: string | null; livre: boolean; now: Date; tz?: string }): PlanoInfo {
+  const t = trialInfo(o.startDate, o.now, o.tz || 'America/Sao_Paulo');
+  const ok = !!o.startDate && /^\d{4}-\d{2}-\d{2}$/.test(o.startDate);
+  const fundador = ok && o.startDate! <= FUNDADOR_ATE;
+  const escolha = o.escolha === 'plus' || o.escolha === 'gratis' ? o.escolha : null;
+  const fimTeste = ok ? new Date(Date.parse(o.startDate + 'T12:00:00Z') + (TRIAL_DAYS - 1) * 864e5).toISOString().slice(0, 10) : null;
+  const plano = o.livre ? 'livre' : escolha === 'plus' ? 'plus' : !t.acabou ? 'teste' : 'gratis';
+  return { plano, fundador, preco: fundador ? PRECO.fundador : PRECO.plus, escolha, testeDia: t.dia, fimTeste, precisaEscolher: !o.livre && ok && !escolha && (fundador || t.acabou) };
+}
+
 /** Texto pronto do aviso de volta (quando a IA não responde a tempo). */
 export function voltaPronto(c: VoltaCtx): { title: string; body: string } {
   const n = c.nome ? `${c.nome}, ` : '';

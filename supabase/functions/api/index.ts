@@ -3,7 +3,7 @@
 import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
 import { falar, ttsLigado } from '../_shared/tts.ts';
-import { localNow, trialInfo } from '../_shared/plan.ts';
+import { GRATIS_POR_DIA, localNow, planoDe, type PlanoInfo } from '../_shared/plan.ts';
 import { aplicarAcao, confere, segredoAcoes } from '../_shared/acoes.ts';
 import { buildIcs } from '../_shared/ics.ts';
 
@@ -17,22 +17,42 @@ async function semLimite(userId: string): Promise<boolean> {
   return !!(o?.length || u?.length);
 }
 
-/** Teste de 7 dias: depois disso a IA pausa para a pessoa (dono e liberados continuam). */
-async function trialOver(userId: string): Promise<boolean> {
-  if (await semLimite(userId)) return false;
-  const row = (await rest(`states?user_id=eq.${userId}&select=start:data->>startDate,tz:data->settings->>tz`))?.[0];
-  return trialInfo(row?.start, new Date(), row?.tz || 'America/Sao_Paulo').acabou;
+/** Plano da pessoa (Grátis, Plus, teste de 7 dias ou liberada). */
+async function planoUser(userId: string): Promise<PlanoInfo> {
+  const [livre, row, esc] = await Promise.all([
+    semLimite(userId),
+    rest(`states?user_id=eq.${userId}&select=start:data->>startDate,tz:data->settings->>tz`).then((r: any) => r?.[0]),
+    rest(`planos?user_id=eq.${userId}&select=escolha`).then((r: any) => r?.[0]?.escolha ?? null).catch(() => null),
+  ]);
+  return planoDe({ startDate: row?.start, escolha: esc, livre, now: new Date(), tz: row?.tz || 'America/Sao_Paulo' });
+}
+
+/** A pessoa escolhe o plano. Plus = reserva do preço (a cobrança ainda não existe) e avisa o dono. */
+async function escolher(userId: string, plano: unknown, nome: unknown): Promise<Response> {
+  if (plano !== 'plus' && plano !== 'gratis') return json({ error: 'bad_request' }, 400);
+  const antes = await planoUser(userId);
+  if (antes.plano === 'livre') return json({ plano: antes });
+  await rest('planos?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: userId, escolha: plano, preco: antes.preco, fundador: antes.fundador, nome: String(nome || '').slice(0, 40), escolhido_em: new Date().toISOString() }) });
+  if (plano === 'plus' && antes.escolha !== 'plus') {
+    const n = String(nome || 'Alguém').split(' ')[0].slice(0, 30);
+    await notifyOwners(`owner:plus:${userId}`, { title: `${n} reservou o Plus 🎉`, body: `R$ ${(antes.preco / 100).toFixed(2).replace('.', ',')} por mês${antes.fundador ? ' (preço de fundador)' : ''}. A cobrança começa quando o Mercado Pago for ligado.`, url: './', tag: 'plus' }).catch(() => {});
+  }
+  return json({ plano: await planoUser(userId) });
 }
 
 async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unknown): Promise<Response> {
   if (typeof prompt !== 'string' || !prompt.trim()) return json({ error: 'bad_request' }, 400);
-  const livre = await semLimite(userId);
-  if (!livre && (await trialOver(userId))) return json({ error: 'trial_over' }, 403);
+  const pl = await planoUser(userId);
+  const livre = pl.plano === 'livre';
+  // Grátis: só a Íris rápida, 5 mensagens por dia
+  const gratis = pl.plano === 'gratis';
+  if (gratis) modelo = 'rapida';
   const key = Deno.env.get('FAIZ_ANTHROPIC_KEY');
   if (!key) return json({ error: 'ai_off' }, 503);
   const day = new Date().toISOString().slice(0, 10);
   const rows = await rest(`usage?user_id=eq.${userId}&day=eq.${day}&select=n`);
   const n = rows?.[0]?.n ?? 0;
+  if (gratis && n >= GRATIS_POR_DIA) return json({ error: 'free_limit', limite: GRATIS_POR_DIA }, 429);
   if (n >= AI_DAILY_LIMIT && !livre) return json({ error: 'limit' }, 429);
   await rest('usage?on_conflict=user_id,day', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ user_id: userId, day, n: n + 1 }) });
   const call = (model: string) => fetch('https://api.anthropic.com/v1/messages', {
@@ -49,7 +69,7 @@ async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unk
   });
   const t0 = Date.now();
   // "rapida" (pedidos simples, escolhido pelo app): Haiku primeiro, ~16x mais barato; se falhar, a completa.
-  const [primeiro, reserva] = modelo === 'rapida' ? [FALLBACK_MODEL, MODEL] : [MODEL, FALLBACK_MODEL];
+  const [primeiro, reserva] = modelo === 'rapida' ? [FALLBACK_MODEL, gratis ? FALLBACK_MODEL : MODEL] : [MODEL, FALLBACK_MODEL];
   let usado = primeiro;
   let res = await call(primeiro);
   // Se o modelo escolhido falhar (fora do ar, sobrecarregado), tenta o outro antes de desistir.
@@ -308,6 +328,8 @@ Deno.serve(async (req) => {
     const user = await getUser(req);
     if (!user) return json({ error: 'auth' }, 401);
     if (action === 'acoes') return await acoesPendentes(user.id);
+    if (action === 'plano') return json({ plano: await planoUser(user.id) });
+    if (action === 'escolher') return await escolher(user.id, body.plano, body.nome);
     if (action === 'ai') return await ai(user.id, body.prompt, body.system, body.modelo);
     if (action === 'subscribe') return await subscribe(user.id, body.subscription, req.headers.get('user-agent') || '');
     if (action === 'test') return await testPush(user.id);
@@ -329,8 +351,9 @@ Deno.serve(async (req) => {
     }
     if (action === 'calstop') { await rest(`cal_feeds?user_id=eq.${user.id}`, { method: 'DELETE' }); return json({ ok: true }); }
     if (action === 'gsave') return await googleSave(user.id, body.refresh_token, body.scopes);
-    if (action === 'gtoken') return await googleToken(user.id);
+    if (action === 'gtoken') { if ((await planoUser(user.id)).plano === 'gratis') return json({ error: 'plus_only' }, 403); return await googleToken(user.id); }
     if (action === 'gforget') { await rest(`google_tokens?user_id=eq.${user.id}`, { method: 'DELETE' }); return json({ ok: true }); }
+    if (action === 'tts' && (await planoUser(user.id)).plano === 'gratis') return json({ error: 'plus_only' }, 403);
     if (action === 'tts') {
       // Voz da Íris no chat de voz: devolve o MP3 (o app cai na voz do celular se der erro)
       try {
@@ -341,7 +364,11 @@ Deno.serve(async (req) => {
         return json({ error: 'tts', message: String((e as Error)?.message || e).slice(0, 100) }, 502);
       }
     }
-    if (action === 'me') return json({ owner: !!(await rest(`owners?user_id=eq.${user.id}&select=user_id`))?.length, aiCredit: !(await aiCreditEmpty()), trialOver: await trialOver(user.id) });
+    if (action === 'me') {
+      const plano = await planoUser(user.id);
+      // trialOver fica para versões antigas do app (elas pausam a IA); a nova usa o plano
+      return json({ owner: !!(await rest(`owners?user_id=eq.${user.id}&select=user_id`))?.length, aiCredit: !(await aiCreditEmpty()), trialOver: plano.plano === 'gratis', plano });
+    }
     return json({ error: 'unknown_action' }, 400);
   } catch (e) {
     console.error(action, e);

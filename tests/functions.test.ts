@@ -50,6 +50,7 @@ const db = {
   cal_feeds: [] as any[],
   manual_push: [] as any[],
   push_actions: [] as any[],
+  planos: [] as any[],
 };
 const pushed: any[] = [];
 let pushStatus = 201;
@@ -357,7 +358,9 @@ test('api: liberados pelo Tiago passam do limite de 40 por dia e do teste de 7 d
   db.usage = [{ n: 40 }];
   db.states = [{ start: '2026-10-01', tz: 'America/Sao_Paulo' }] as any; // o banco de mentira devolve a linha como o select pede
   db.unlimited = [];
-  assert.equal((await post(api, { action: 'ai', prompt: 'oi' }, auth)).status, 403, 'sem liberação: teste acabou');
+  const fl = await post(api, { action: 'ai', prompt: 'oi' }, auth);
+  assert.equal(fl.status, 429, 'sem liberação, teste acabou: plano Grátis, 5 por dia');
+  assert.equal((await fl.json()).error, 'free_limit');
   db.unlimited = [{ user_id: U }];
   db.ai_log = [];
   const r = await post(api, { action: 'ai', prompt: 'oi' }, auth);
@@ -366,6 +369,42 @@ test('api: liberados pelo Tiago passam do limite de 40 por dia e do teste de 7 d
   assert.equal(db.ai_log[0].status, 200);
   assert.ok(db.ai_log[0].ms >= 0 && !('text' in db.ai_log[0]), 'registra tempo, nunca o conteúdo');
   Object.assign(db, antes);
+});
+
+test('api: planos — Grátis usa só a Íris rápida (5 por dia), sem voz nem Google; escolher o Plus reserva e libera', async () => {
+  const auth = { Authorization: 'Bearer user-token', apikey: 'anon' };
+  const antes = { usage: db.usage, states: db.states, unlimited: db.unlimited, planos: db.planos, owners: db.owners };
+  db.unlimited = []; db.planos = []; db.owners = [];
+  db.states = [{ start: '2026-11-01', tz: 'America/Sao_Paulo' }] as any; // fundador, teste acabou
+  setNow('2026-11-11T15:00:00Z');
+  try {
+    let me = await (await post(api, { action: 'me' }, auth)).json();
+    assert.equal(me.plano.plano, 'gratis'); assert.equal(me.plano.fundador, true); assert.equal(me.plano.preco, 999); assert.equal(me.plano.precisaEscolher, true);
+    db.usage = [{ n: 2 }]; models.length = 0;
+    assert.equal((await post(api, { action: 'ai', prompt: 'monta meu treino', modelo: 'completa' }, auth)).status, 200);
+    assert.deepEqual(models, ['claude-haiku-5-5'], 'Grátis sempre na Íris rápida');
+    db.usage = [{ n: 5 }];
+    assert.equal((await post(api, { action: 'ai', prompt: 'oi' }, auth)).status, 429);
+    assert.equal((await post(api, { action: 'tts', text: 'oi' }, auth)).status, 403);
+    assert.equal((await post(api, { action: 'gtoken' }, auth)).status, 403);
+    // escolhe o Plus: reserva o preço de fundador e volta a ter a Íris completa
+    const r = await (await post(api, { action: 'escolher', plano: 'plus', nome: 'Kauã Silva' }, auth)).json();
+    assert.equal(db.planos.length, 1); assert.equal(db.planos[0].escolha, 'plus'); assert.equal(db.planos[0].preco, 999);
+    db.planos = [{ escolha: 'plus' }];
+    me = await (await post(api, { action: 'me' }, auth)).json();
+    assert.equal(me.plano.plano, 'plus'); assert.equal(me.plano.precisaEscolher, false);
+    db.usage = [{ n: 5 }]; models.length = 0;
+    assert.equal((await post(api, { action: 'ai', prompt: 'monta meu treino', modelo: 'completa' }, auth)).status, 200);
+    assert.deepEqual(models, ['claude-sonnet-5-5']);
+    assert.ok(r.plano);
+    // gente nova (depois de 10/11) no 3º dia: teste do Plus, ainda sem escolher
+    db.planos = []; db.states = [{ start: '2026-11-09', tz: 'America/Sao_Paulo' }] as any;
+    me = await (await post(api, { action: 'me' }, auth)).json();
+    assert.equal(me.plano.plano, 'teste'); assert.equal(me.plano.fundador, true);
+    db.states = [{ start: '2026-11-11', tz: 'America/Sao_Paulo' }] as any;
+    me = await (await post(api, { action: 'me' }, auth)).json();
+    assert.equal(me.plano.fundador, false); assert.equal(me.plano.preco, 1299); assert.equal(me.plano.precisaEscolher, false); assert.equal(me.plano.fimTeste, '2026-11-17');
+  } finally { Object.assign(db, antes); }
 });
 
 test('api: Google — guarda a chave de renovação e devolve uma chave temporária; permissão tirada apaga', async () => {

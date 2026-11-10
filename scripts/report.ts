@@ -14,6 +14,8 @@ const owners = new Set(((await get('owners?select=user_id')) as any[]).map((o) =
 const pushLog: any[] = await get(`push_log?select=user_id,at,kind,status,ok,gone&at=gte.${new Date(Date.now() - 14 * 864e5).toISOString()}&order=at.desc&limit=5000`);
 const livres = new Set(((await get('unlimited?select=user_id')) as any[]).map((o) => o.user_id));
 const aiLog: any[] = await get(`ai_log?select=at,status,stop,ms,out_tokens,model&at=gte.${new Date(Date.now() - 14 * 864e5).toISOString()}&order=at.desc&limit=5000`);
+const planosRows: any = await get('planos?select=user_id,escolha,preco,escolhido_em');
+const planos = new Map((Array.isArray(planosRows) ? planosRows : []).map((x) => [x.user_id, x]));
 const subs = new Set(((await get('subs?select=user_id')) as any[]).map((s) => s.user_id));
 const reports: any[] = await get('reports?select=user_id,text,ctx,created_at&order=created_at.asc');
 
@@ -68,6 +70,11 @@ const pessoas = states
       faturasPagas: (d.fin?.faturas ?? []).length,
       contasSemanaisOuAnuais: (d.fin?.fixas ?? []).filter((x: any) => x?.freq === 'semanal' || x?.freq === 'anual').length,
       // desde 10/11: editar tocando na atividade, criar direto (sem Confirmar), ícone de avaliar, mini tutorial, botões do aviso
+      // plano escolhido (Plus = preço reservado; a cobrança ainda não existe)
+      plano: livres.has(s.user_id) || owners.has(s.user_id) ? 'liberado' : planos.get(s.user_id)?.escolha || 'ainda não escolheu',
+      precoReservado: planos.get(s.user_id)?.escolha === 'plus' ? planos.get(s.user_id).preco / 100 : null,
+      planoEm: planos.get(s.user_id)?.escolhido_em || null,
+      iaPorModelo: st.iaModelo || {},
       edicoes: st.edits || 0,
       criadosDireto: st.direto || 0,
       abriuAvaliar: st.avaliar || 0,

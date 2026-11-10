@@ -191,6 +191,26 @@ button{cursor:pointer}
 .qr button{border:1.5px solid var(--blue);background:var(--surface);color:var(--blue-ink);border-radius:999px;padding:8px 13px;font-size:14px;font-weight:600;text-align:left}
 .qr button.outra{border-style:dashed;color:var(--muted, #5b6170);font-weight:500}
 /* vídeo de apresentação */
+.planos{position:fixed;inset:0;z-index:55;background:var(--surface);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:calc(18px + env(safe-area-inset-top,0px)) 16px calc(28px + env(safe-area-inset-bottom,0px))}
+.planos .ptop{display:flex;align-items:center;justify-content:space-between;max-width:440px;margin:0 auto}
+.planos .pwrap{max-width:440px;margin:0 auto}
+.planos .ptop svg{width:40px;height:40px}
+.planos .ptop .round svg{width:21px;height:21px}
+.planos h1{font-family:var(--f-ui);font-weight:800;font-size:30px;text-wrap:balance;line-height:1.08;letter-spacing:-.02em;text-align:center;color:var(--navy);margin:22px 0 16px}
+.planos .pintro{display:flex;gap:10px;align-items:flex-start;background:var(--lav,#F1F0FF);border-radius:16px;padding:12px 14px;font-size:15px;line-height:1.4;margin-bottom:16px}
+.pcard{border:1.5px solid var(--line);border-radius:24px;padding:22px 22px 20px;margin-top:14px;background:var(--surface)}
+.pcard.plus{border:2px solid var(--navy);box-shadow:0 18px 36px -24px rgba(12,42,72,.45)}
+.pcard .pname{display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:var(--f-ui);font-weight:800;font-size:21px;color:var(--navy)}
+.pcard .badge{font-family:var(--f-ui);font-size:12.5px;font-weight:600;color:#1A7F72;background:#DFF3F0;border-radius:999px;padding:6px 12px;white-space:nowrap}
+.pcard .price{font-family:var(--f-ui);font-weight:800;font-size:44px;letter-spacing:-.03em;color:var(--navy);margin-top:12px;line-height:1}
+.pcard .price small{font-family:var(--f-ui);font-weight:500;font-size:16px;color:var(--ink-muted);letter-spacing:0;margin-left:4px}
+.pcard .old{font-size:15px;color:var(--ink-muted);text-decoration:line-through;margin-top:10px}
+.pcard .psub{color:var(--ink-muted);font-size:15.5px;margin:10px 0 0;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.pcard ul{list-style:none;padding:0;margin:14px 0 18px;display:flex;flex-direction:column;gap:11px}
+.pcard li{display:flex;gap:10px;align-items:flex-start;font-size:15.5px;line-height:1.35;color:var(--ink)}
+.pcard li i{flex:none;width:22px;height:22px;border-radius:50%;background:#DFF3F0;color:#1A7F72;display:grid;place-items:center;font-style:normal;font-size:13px;font-weight:700;margin-top:-1px}
+.pcard .btn.soft{background:#DFF3F0;color:#1A7F72}
+.planos .pnote{font-size:13px;color:var(--ink-muted);text-align:center;margin:16px 6px 0;line-height:1.45}
 .coach{position:fixed;inset:0;z-index:60}
 .coach .spot{position:fixed;border-radius:50%;pointer-events:none}
 .coach .spot::after{content:'';position:absolute;inset:-7px;border-radius:50%;border:3px solid var(--teal);animation:coachPulse 1.4s ease-out infinite}
@@ -483,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 09:08';
+const APP_VERSION = '2026-11-10 09:34';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -773,7 +793,7 @@ async function updatePushState() { U.pushState = await Push.state(); render(true
   await acoesDoAviso();
   if (S.onboarded && integ('agenda')) agendaSync();
   if (S.onboarded && integ('tarefas')) tarefasSync();
-  if (S.onboarded) { Cloud.push(); Push.refresh().then(updatePushState); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; U.trialOver = !!m.trialOver; if (U.trialOver) render(true); if (U.tab === 'mais') render(true); }).catch(() => {}); }
+  if (S.onboarded) { Cloud.push(); Push.refresh().then(updatePushState); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; U.trialOver = false; if (m.plano) U.plano = m.plano; render(true); }).catch(() => {}); }
   updatePushState();
 })();
 
@@ -886,7 +906,7 @@ async function gcalList() {
 /** Google Agenda → Faiz: traz 30 dias de todas as agendas visíveis. Eventos de vários dias aparecem em cada dia. Só leitura. */
 const GDIAS = 30;
 async function agendaSync(force) {
-  if (!integ('agenda') || !Cloud.on || agendaBusy) return;
+  if (!integ('agenda') || !Cloud.on || agendaBusy || ehGratis()) return;
   if (!force && U.agendaAt && Date.now() - U.agendaAt < 5 * 60000) return agendaLimpa();
   agendaBusy = true;
   try {
@@ -940,7 +960,7 @@ async function agendaSync(force) {
  *  Concluída no Google = feita aqui. Tarefa sem data fica de fora (o Faiz organiza por dia). */
 let tarefasBusy = false;
 async function tarefasSync(force) {
-  if (!integ('tarefas') || !Cloud.on || tarefasBusy) return;
+  if (!integ('tarefas') || !Cloud.on || tarefasBusy || ehGratis()) return;
   if (!force && U.tarefasAt && Date.now() - U.tarefasAt < 5 * 60000) return;
   tarefasBusy = true;
   try {
@@ -1048,7 +1068,7 @@ function lerBoleto(txt, de, hoje) {
 }
 window.__lerBoleto = lerBoleto;
 async function gmailScan(force) {
-  if (!integ('gmail') || U.gmailBusy) return;
+  if (!integ('gmail') || U.gmailBusy || ehGratis()) return;
   if (!force && U.gmailAt && Date.now() - U.gmailAt < 60 * 60000) return;
   U.gmailBusy = true; render(true);
   try {
@@ -1076,6 +1096,7 @@ function gmailAnotar(id) {
 function gmailIgnorar(id) { S.gmailSeen = [...(S.gmailSeen || []), id].slice(-200); U.gmailFound = (U.gmailFound || []).filter((x) => x.id !== id); save(); render(true); }
 function integracoesCard() {
   if (!U.googleOk) return '';
+  if (ehGratis()) return `<div class="label">Integrações com o Google</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">Google Agenda, Tarefas, Contatos e Gmail</div><div class="meta">Fazem parte do Plus.</div></div><span class="pill navy">Ver o Plus</span></button></div>`;
   const linha = (k, t, d) => integ(k)
     ? `<div class="setrow"><div class="txt"><div class="t">${t}</div><div class="meta">${d}</div></div><span class="pill ok">Ligado</span></div>`
     : `<button class="setrow" type="button" data-act="g-ligar" data-v="${k}"><div class="txt"><div class="t">${t}</div><div class="meta">${d}</div></div><span class="pill">Ligar</span></button>`;
@@ -1635,14 +1656,14 @@ async function send(text, opt = {}) {
       const tentar = async () => {
         let res;
         try { res = await Cloud.fn('ai', { system: parts.system, prompt: parts.user, modelo }); }
-        catch (e) { e.why = e?.code ? 'servidor_' + e.code : !navigator.onLine ? 'sem_internet' : e?.status ? 'servidor_http' + e.status : 'rede'; throw e; }
+        catch (e) { if (e?.code === 'free_limit') e.limite = 5; e.why = e?.code ? 'servidor_' + e.code : !navigator.onLine ? 'sem_internet' : e?.status ? 'servidor_http' + e.status : 'rede'; throw e; }
         try { return parseJson(res.text); }
         catch (e) { e.why = res.stop === 'max_tokens' ? 'cortada' : 'formato'; throw e; }
       };
       let json;
       try { json = await tentar(); }
       catch (e) {
-        const definitivo = ['servidor_no_credit', 'servidor_trial_over', 'servidor_limit', 'servidor_auth', 'sem_internet', 'cortada'].includes(e?.why);
+        const definitivo = ['servidor_no_credit', 'servidor_trial_over', 'servidor_limit', 'servidor_free_limit', 'servidor_auth', 'sem_internet', 'cortada'].includes(e?.why);
         if (definitivo) throw e;
         S.stats.aiRetry = (S.stats.aiRetry || 0) + 1;
         json = await tentar();
@@ -1657,8 +1678,8 @@ async function send(text, opt = {}) {
       S.stats.aiFailWhy = { ...(S.stats.aiFailWhy || {}), [motivo]: ((S.stats.aiFailWhy || {})[motivo] || 0) + 1 };
       reply = L.interpret(clean, { now: new Date(), tasks: S.tasks, fin: S.fin, routines: S.routines });
       if (e?.code === 'no_credit') U.aiCredit = false;
-      if (e?.code === 'trial_over') U.trialOver = true;
-      const why = e?.code === 'trial_over' ? TRIAL_MSG : e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : e?.why === 'cortada' ? 'Esse pedido ficou grande demais pra mim de uma vez 😅 Respondi do jeito simples; tenta pedir em partes.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
+      if (e?.code === 'free_limit') { reply.links = [...(reply.links || []), { label: '⭐ Ver o Plus', act: 'planos' }]; S.stats.limiteGratis = (S.stats.limiteGratis || 0) + 1; }
+      const why = e?.code === 'free_limit' ? `Você já usou as ${e?.limite || 5} mensagens de hoje comigo no Grátis 💜 Respondi do jeito simples; amanhã tem mais. No Plus é bem mais que isso, e com a minha versão completa.` : e?.code === 'trial_over' ? TRIAL_MSG : e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : e?.why === 'cortada' ? 'Esse pedido ficou grande demais pra mim de uma vez 😅 Respondi do jeito simples; tenta pedir em partes.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
       if (why) reply.notes = [reply.notes, why].filter(Boolean).join('\n');
     }
   } else {
@@ -1700,6 +1721,7 @@ async function send(text, opt = {}) {
     // a Íris indo além do pedido (próximo passo) continua aparecendo
     const ult = S.chat[S.chat.length - 1];
     if (ult && S.chat.length > n0 && ult.who === 'bot' && reply.sugs?.length && !ult.sugs) { ult.sugs = reply.sugs; save(); }
+    if (ult && S.chat.length > n0 && ult.who === 'bot' && links.length && !ult.links) { ult.links = links; save(); }
   }
   if (reply.entrevista && S.entrevista?.on) { if (reply.entrevista === 'parar') entrevistaPausa(); else entrevistaNext(); }
   U.scrollChat = true; render(true);
@@ -2164,7 +2186,7 @@ const Voice = (() => {
     const t = clean(text); if (!t) return;
     const n = ++falaN;
     stopAll();
-    if (Cloud.on && U.ttsOk === true) {
+    if (Cloud.on && U.ttsOk === true && !ehGratis()) {
       try {
         const blob = await Cloud.audio(t.slice(0, 700));
         if (n !== falaN) return; // chegou outra fala depois
@@ -2267,6 +2289,81 @@ async function clearNotifications() {
     (await r.getNotifications()).forEach((n) => n.close());
     navigator.clearAppBadge?.().catch(() => {});
   } catch (e) {}
+}
+
+/* ---------- Planos: Grátis e Plus ----------
+   Decisão do Tiago (11/11): gente nova tem 7 dias de Plus grátis e depois escolhe Plus (R$ 12,99) ou Grátis;
+   quem já testava escolhe agora: Plus a R$ 9,99 (preço de fundador) ou Grátis. O servidor é quem manda no plano
+   (ação "plano"/"escolher"; Grátis = Íris rápida com 5 mensagens por dia, sem voz e sem Google).
+   A cobrança ainda não existe: escolher o Plus reserva o preço e segue no Plus de graça até ela começar. */
+const brl2 = (c) => 'R$ ' + (c / 100).toFixed(2).replace('.', ',');
+const ehGratis = () => U.plano?.plano === 'gratis';
+function planoNome() {
+  const p = U.plano; if (!p) return '';
+  if (p.plano === 'livre') return 'Liberado pelo time do Faiz';
+  if (p.plano === 'plus') return `Plus · ${brl2(p.preco)}/mês reservado`;
+  if (p.plano === 'teste') return `Teste do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}`;
+  return 'Grátis';
+}
+async function planoAtualiza() {
+  try { const r = await Cloud.fn('plano'); if (r?.plano) { U.plano = r.plano; render(true); } } catch (e) {}
+}
+function planosScreen(obrig) {
+  if (document.getElementById('planos') || !U.plano || U.plano.plano === 'livre') return;
+  const p = U.plano, fund = p.fundador;
+  const el = document.createElement('div');
+  el.className = 'planos'; el.id = 'planos'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Planos do Faiz');
+  const check = (t) => `<li><i>✓</i><span>${t}</span></li>`;
+  const intro = fund
+    ? `Você testou o Faiz desde o começo 💜 Por isso, pra você o Plus sai por <b>${brl2(p.preco)} por mês</b>, enquanto assinar. Quem chegar agora vai pagar R$ 12,99.`
+    : p.plano === 'teste' ? `Você está no teste do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}. Depois, escolhe como continuar.` : 'Seus 7 dias de Plus acabaram. Escolha como continuar:';
+  el.innerHTML = `<div class="ptop"><span class="row" style="gap:8px">${LOGO}<b style="font-family:var(--f-display);font-size:22px;color:var(--navy)">faiz</b></span>${obrig ? '' : '<button class="round" type="button" data-pl="fechar" aria-label="Fechar">' + I.x + '</button>'}</div>
+    <div class="pwrap">
+      <h1>Grátis para organizar. Plus para resolver por você.</h1>
+      <div class="pintro">${irisImg('comemorando', 40)}<span>${intro}</span></div>
+      <div class="pcard plus">
+        <div class="pname">Faiz Plus<span class="badge">${fund ? 'Preço de fundador' : 'Cobrança só em dezembro'}</span></div>
+        ${fund ? '<div class="old">R$ 12,99</div>' : ''}
+        <div class="price" style="${fund ? 'margin-top:2px' : ''}">${brl2(p.preco)}<small>/mês</small></div>
+        <p class="psub">Para o Faiz resolver por você.</p>
+        <ul>${[ 'Íris completa: monta rotinas, treinos e cronogramas', 'Até 40 mensagens por dia com a Íris', 'Reorganiza o que ficou atrasado', 'Voz da Íris respondendo em voz alta', 'Google Agenda, Tarefas, Contatos e Gmail', 'Contas e todos os avisos'].map(check).join('')}</ul>
+        <button class="btn" type="button" data-pl="plus">${p.escolha === 'plus' ? 'Seu plano atual' : 'Quero o Plus'}</button>
+      </div>
+      <div class="pcard">
+        <div class="pname">Faiz</div>
+        <div class="price">Grátis</div>
+        <p class="psub">Para organizar o dia.</p>
+        <ul>${['Íris rápida: 5 mensagens por dia', 'Avisos, agenda, tarefas e rotinas sem limite', 'Contas: gastos e contas fixas'].map(check).join('')}</ul>
+        <button class="btn soft" type="button" data-pl="gratis">${p.escolha === 'gratis' ? 'Seu plano atual' : 'Continuar no Grátis'}</button>
+      </div>
+      <p class="pnote">A cobrança ainda não começou. Escolhendo o Plus, você garante esse preço e segue com o Plus liberado de graça até a cobrança começar, em dezembro. Antes de cobrar a gente avisa, e dá para desistir.</p>
+    </div>`;
+  document.body.appendChild(el);
+  U.planosAberto = true; S.stats.planosVistos = (S.stats.planosVistos || 0) + 1; save();
+  const fecha = () => { el.remove(); U.planosAberto = false; render(true); };
+  el.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-pl]'); if (!b) return;
+    if (b.dataset.pl === 'fechar') return fecha();
+    const escolha = b.dataset.pl;
+    if (U.plano.escolha === escolha) return fecha();
+    b.disabled = true; b.textContent = 'Salvando...';
+    try {
+      const r = await Cloud.fn('escolher', { plano: escolha, nome: S.name });
+      if (r?.plano) U.plano = r.plano;
+      S.stats.plano = { escolha, em: new Date().toISOString() }; save();
+      fecha();
+      if (escolha === 'plus') sheet(`<div class="row" style="gap:10px">${irisImg('comemorando', 56)}<div class="sub" style="flex:1"><b>Fechado! 🎉</b></div></div>
+        <p style="margin:0">Seu preço de <b>${brl2(U.plano.preco)} por mês</b> está garantido. O Plus continua liberado de graça até a cobrança começar, em dezembro. Antes disso eu te aviso.</p>
+        <button class="btn" type="button" data-close-sheet>Bora!</button>`, (s2) => { s2.querySelector('[data-close-sheet]').onclick = closeSheet; });
+      else toast('Beleza! Você segue no Grátis. Dá para ir pro Plus quando quiser em Mais › Seu plano.');
+    } catch (err) { b.disabled = false; b.textContent = escolha === 'plus' ? 'Quero o Plus' : 'Continuar no Grátis'; toast('Não consegui salvar agora. Confira a internet e tente de novo.'); }
+  });
+}
+/** A cada render: quem precisa escolher o plano vê a tela (depois do tutorial e sem nada aberto por cima). */
+function planosWatch() {
+  if (!U.plano?.precisaEscolher || U.planosAberto || !S.tutorialSeen || !S.onboarded) return;
+  if (document.getElementById('coach') || $overlay.innerHTML || /[?&](t|v)=/.test(location.search)) return;
+  setTimeout(() => { if (U.plano?.precisaEscolher && !U.planosAberto && !$overlay.innerHTML && !document.getElementById('coach')) planosScreen(true); }, 600);
 }
 
 /* ---------- Mini tutorial (setas e círculos) ----------
@@ -2632,6 +2729,7 @@ const screens = {
       ${novidadeCard()}
       ${integ('agenda') && S.integ.agendaSoPrincipal && !S.news?.gcals ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Você usa mais de uma agenda no Google?</b> Por enquanto eu só trago a principal. Posso trazer as outras também (escola, trabalho, feriados).</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="gcals-nao">Só a principal</button><button class="pill navy" type="button" data-act="g-ligar" data-v="agenda">Trazer todas</button></div></div>` : ''}
       ${!S.account?.google && S.stats.days.length >= 2 && !S.googleNudge && !novidadeDevida() ? `<div class="card irisline" style="flex-wrap:wrap">${irisImg('oculos', 44)}<span><b>Salva sua conta com o Google?</b> Assim você não perde nada se trocar de celular.</span><div class="row" style="width:100%;gap:8px;justify-content:flex-end"><button class="pill" type="button" data-act="google-depois">Depois</button><button class="pill navy" type="button" data-act="google-link">Salvar com Google</button></div></div>` : ''}
+      ${U.plano?.plano === 'teste' && !U.plano.fundador && U.plano.testeDia >= 5 && !U.plano.escolha ? `<button class="card irisline" type="button" data-act="planos">${irisImg('oculos', 44)}<span><b>Seu teste do Plus vai até ${esc(L.ddmm(U.plano.fimTeste))}.</b> Depois você escolhe: Plus por R$ 12,99 ou continuar no Grátis. Toque para ver.</span></button>` : ''}
       ${U.trialOver && !S.trialSeen ? `<button class="card irisline" type="button" data-act="trialok">${irisImg('comemorando', 44)}<span><b>Fechamos os 7 dias! Valeu demais por testar 💜</b> Minha inteligência pausou por enquanto, mas avisos, contas e rotinas continuam. Toque para fechar.</span></button>` : ''}
       ${pesquisaDevida() ? `<button class="card irisline" type="button" data-act="pesquisa">${irisImg('pensando', 44)}<span>${pesquisaAtrasada() ? `<b>Ainda dá tempo! 🙏</b> Sua opinião é muito importante pro grupo Faiz entender o que já tá bom e o que dá pra melhorar.` : `<b>Me ajuda com ${pesquisaDevida() === 'd7' ? '2 minutinhos' : '1 minutinho'}?</b> Me conta como tá sendo o Faiz pra você 🙏`}</span></button>` : ''}
       ${all.length || S.tasks.some((t) => t.date < d && t.status !== 'feito') ? (() => { const f = irisHoje(); return `<button class="card irisline" type="button" data-act="tab" data-v="faz">${irisImg(f.mood, 44)}<span>${esc(f.text)}</span></button>`; })() : ''}
@@ -2704,7 +2802,7 @@ const screens = {
     };
     return `<main class="screen bg-peach" style="padding-bottom:0">
       <div class="head"><span>${irisImg('principal', 44)}</span><div style="text-align:center"><h1 class="screen-title">Íris</h1><div class="meta">sua governanta no Faiz</div></div><span></span></div>
-      ${U.trialOver ? '<p class="ai-note">Seu teste de 7 dias com a IA terminou. Agora eu entendo frases mais diretas.</p>' : U.aiState === 'off' ? '<p class="ai-note">Modo simples: a IA não está disponível agora, então entendo frases mais diretas.</p>' : ''}${U.pushState !== 'on' && U.pushState !== 'checking' ? `<p class="ai-note">Avisos desligados neste celular. <button class="textbtn" type="button" data-act="notify" style="font-size:12.5px;padding:0">Ativar</button></p>` : ''}
+      ${ehGratis() ? '<p class="ai-note">Plano Grátis: 5 mensagens por dia com a Íris rápida. <button class="textbtn" type="button" data-act="planos" style="font-size:12.5px;padding:0">Ver o Plus</button></p>' : U.trialOver ? '<p class="ai-note">Seu teste de 7 dias com a IA terminou. Agora eu entendo frases mais diretas.</p>' : U.aiState === 'off' ? '<p class="ai-note">Modo simples: a IA não está disponível agora, então entendo frases mais diretas.</p>' : ''}${U.pushState !== 'on' && U.pushState !== 'checking' ? `<p class="ai-note">Avisos desligados neste celular. <button class="textbtn" type="button" data-act="notify" style="font-size:12.5px;padding:0">Ativar</button></p>` : ''}
       <div class="chat" id="chat" style="padding-top:6px">
         <div class="botrow">${irisImg('principal', 34)}<div class="msg bot">${intro}</div></div>
         ${S.chat.map(bubble).join('')}
@@ -2758,6 +2856,7 @@ const screens = {
       <div class="head"><button class="round" type="button" data-act="tab" data-v="hoje" aria-label="Voltar">${I.left}</button><h1 class="screen-title">Mais</h1><span></span></div>
       <div class="label">Avisos no celular</div>
       ${avisosCard()}
+      ${U.plano && U.plano.plano !== 'livre' ? `<div class="label">Seu plano</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris rápida com 5 mensagens por dia, Contas e avisos.' : 'Íris completa, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() ? 'navy' : ''}">${ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button></div>` : ''}
       <div class="label">Teste do Faiz</div>
       <div class="card">
         <button class="setrow" type="button" data-act="entrevista-de-novo"><div class="txt"><div class="t">Montar minha rotina com a Íris</div><div class="meta">${S.entrevista?.fim ? 'Feito. Toque para revisar trabalho, estudos e exercícios.' : 'Ela pergunta o que é fixo na sua semana e monta tudo.'}</div></div><span class="pill">${S.entrevista?.fim ? 'Revisar' : 'Começar'}</span></button>
@@ -2809,6 +2908,7 @@ function render(keep) {
   if (pre) { $app.innerHTML = screens[pre](); return; }
   $app.innerHTML = screens[U.tab]() + nav();
   coachWatch();
+  planosWatch();
   if (U.tab === 'faz') {
     const inp = document.getElementById('chatInput');
     if (draft) inp.value = draft;
@@ -3115,6 +3215,7 @@ document.addEventListener('click', (e) => {
     case 'fin-limite': limiteSheet(); break;
     case 'feedback': feedbackSheet(); break;
     case 'avaliar': avaliarSheet(); break;
+    case 'planos': planosScreen(false); break;
     case 'owner': ownerSheet(); break;
     case 'problema': problemSheet(); break;
     case 'pesquisa': { const q = pesquisaDevida(); if (q) surveySheet(q); break; }
