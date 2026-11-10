@@ -60,6 +60,20 @@ if (process.env.AZURE_SPEECH_KEY) secrets.push({ name: 'FAIZ_AZURE_SPEECH_KEY', 
 if (process.env.AZURE_SPEECH_REGION) secrets.push({ name: 'FAIZ_AZURE_SPEECH_REGION', value: process.env.AZURE_SPEECH_REGION.trim().toLowerCase() });
 if (process.env.GOOGLE_CLIENT_ID) secrets.push({ name: 'FAIZ_GOOGLE_ID', value: process.env.GOOGLE_CLIENT_ID.trim() });
 if (process.env.GOOGLE_CLIENT_SECRET) secrets.push({ name: 'FAIZ_GOOGLE_SECRET', value: process.env.GOOGLE_CLIENT_SECRET.trim() });
+// Mercado Pago (assinatura do Plus). Confere a chave sem mostrar dados da conta.
+const mpTok = (process.env.MP_ACCESS_TOKEN || '').trim();
+if (mpTok) {
+  try {
+    const r = await fetch('https://api.mercadopago.com/users/me', { headers: { Authorization: `Bearer ${mpTok}` } });
+    const j: any = await r.json().catch(() => ({}));
+    if (!r.ok) console.log(`::warning::MERCADO PAGO: a chave não foi aceita (${r.status} ${String(j.message || j.error || '').slice(0, 80)}). Confira o segredo MP_ACCESS_TOKEN (Access Token de produção, começa com APP_USR-).`);
+    else {
+      const teste = Array.isArray(j.tags) && j.tags.includes('test_user');
+      step(`MERCADO PAGO: chave aceita · país ${j.site_id || '?'} · ${teste ? 'conta de TESTE' : 'conta real'} · ${mpTok.startsWith('APP_USR-') ? 'formato de produção' : 'formato antigo'}`);
+      secrets.push({ name: 'FAIZ_MP_TOKEN', value: mpTok });
+    }
+  } catch (e) { console.log(`::warning::MERCADO PAGO: não consegui falar com a API (${(e as Error).message}).`); }
+} else console.log('::warning::MERCADO PAGO: o segredo MP_ACCESS_TOKEN não chegou (vazio).');
 if (process.env.OWNER_WHATSAPP) secrets.push({ name: 'FAIZ_WHATSAPP', value: process.env.OWNER_WHATSAPP.replace(/\D/g, '') });
 if (!existing.has('FAIZ_VAPID_PRIVATE') || !existing.has('FAIZ_VAPID_PUBLIC')) {
   const v = await generateVapidKeys();
