@@ -252,6 +252,17 @@ test('api: se o Sonnet falhar, usa o modelo rápido', async () => {
   assert.equal(r.text, '{"acao":"conversa","resposta":"Oi"}');
 });
 
+test('api: pedido simples vai para a Íris rápida (Haiku) primeiro; se ela falhar, a completa', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  db.usage = []; models.length = 0;
+  await (await post(api, { action: 'ai', prompt: 'gastei 30 no uber', modelo: 'rapida' }, auth)).json();
+  assert.deepEqual(models, ['claude-haiku-5-5']);
+  assert.equal(db.ai_log.at(-1).model, 'claude-haiku-5-5');
+  models.length = 0;
+  await (await post(api, { action: 'ai', prompt: 'monta meu treino', modelo: 'completa' }, auth)).json();
+  assert.deepEqual(models, ['claude-sonnet-5-5']);
+});
+
 test('api: padaria mais próxima, ordenada por distância', async () => {
   const auth = { Authorization: 'Bearer user-token' };
   const r = await (await post(api, { action: 'nearby', lat: -23.5505, lon: -46.6333, termo: 'padaria', osm: ['shop=bakery', 'x"];out;'] }, auth)).json();

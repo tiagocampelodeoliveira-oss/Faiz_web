@@ -24,7 +24,7 @@ async function trialOver(userId: string): Promise<boolean> {
   return trialInfo(row?.start, new Date(), row?.tz || 'America/Sao_Paulo').acabou;
 }
 
-async function ai(userId: string, prompt: unknown, system: unknown): Promise<Response> {
+async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unknown): Promise<Response> {
   if (typeof prompt !== 'string' || !prompt.trim()) return json({ error: 'bad_request' }, 400);
   const livre = await semLimite(userId);
   if (!livre && (await trialOver(userId))) return json({ error: 'trial_over' }, 403);
@@ -48,10 +48,12 @@ async function ai(userId: string, prompt: unknown, system: unknown): Promise<Res
     }),
   });
   const t0 = Date.now();
-  let usado = MODEL;
-  let res = await call(MODEL);
-  // Se o modelo principal falhar (fora do ar, sobrecarregado), tenta o rápido antes de desistir.
-  if (!res.ok && res.status !== 400 && res.status !== 401) { console.error('anthropic main', res.status); usado = FALLBACK_MODEL; res = await call(FALLBACK_MODEL); }
+  // "rapida" (pedidos simples, escolhido pelo app): Haiku primeiro, ~16x mais barato; se falhar, a completa.
+  const [primeiro, reserva] = modelo === 'rapida' ? [FALLBACK_MODEL, MODEL] : [MODEL, FALLBACK_MODEL];
+  let usado = primeiro;
+  let res = await call(primeiro);
+  // Se o modelo escolhido falhar (fora do ar, sobrecarregado), tenta o outro antes de desistir.
+  if (!res.ok && res.status !== 400 && res.status !== 401) { console.error('anthropic main', res.status); usado = reserva; res = await call(reserva); }
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     await aiLog(userId, { model: usado, status: res.status, ms: Date.now() - t0, err: t.slice(0, 200) });
@@ -306,7 +308,7 @@ Deno.serve(async (req) => {
     const user = await getUser(req);
     if (!user) return json({ error: 'auth' }, 401);
     if (action === 'acoes') return await acoesPendentes(user.id);
-    if (action === 'ai') return await ai(user.id, body.prompt, body.system);
+    if (action === 'ai') return await ai(user.id, body.prompt, body.system, body.modelo);
     if (action === 'subscribe') return await subscribe(user.id, body.subscription, req.headers.get('user-agent') || '');
     if (action === 'test') return await testPush(user.id);
     if (action === 'nearby') return await nearby(body);

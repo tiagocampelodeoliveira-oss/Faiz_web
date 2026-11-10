@@ -1,6 +1,7 @@
 // Libera pessoas do teste sem limite (7 dias de IA e 40 pedidos por dia), pelo primeiro nome cadastrado no app.
 // Roda no GitHub Actions: workflow "Liberar sem limite", campo "nomes" (ex.: "Amanda, Jhuliana").
 // Só libera quando o nome bate com UMA pessoa; se bater com mais de uma, avisa e não libera ninguém com aquele nome.
+// Nome com * no fim ("Amanda*") libera TODAS as contas com esse nome (a mesma pessoa com dois celulares ou uma conta antiga).
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN!;
 const REF = process.env.SUPABASE_PROJECT_REF!;
 const NOMES = String(process.env.NOMES || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -13,11 +14,19 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 const states: { user_id: string; data: any }[] = await (await fetch(`${base}/states?select=user_id,data->name`, { headers: H })).json().then((r: any) => r.map((x: any) => ({ user_id: x.user_id, data: { name: x.name } })));
 const linhas: string[] = [];
 for (const nome of NOMES) {
-  const alvo = norm(nome).split(/\s+/);
+  const todas = nome.endsWith('*');
+  const alvo = norm(nome.replace(/\*$/, '')).split(/\s+/);
   // pontua quantas palavras digitadas aparecem no nome; fica com quem tem a maior pontuação (precisa ser uma pessoa só)
   const pont = states.map((s) => ({ s, n: (() => { const ws = norm(String(s.data?.name || '')).split(/\s+/); return alvo.filter((w) => ws.includes(w)).length; })() }));
   const max = Math.max(0, ...pont.map((p) => p.n));
   const achados = max ? pont.filter((p) => p.n === max).map((p) => p.s) : [];
+  if (todas && achados.length > 1) {
+    for (const p of achados) {
+      const r = await fetch(`${base}/unlimited?on_conflict=user_id`, { method: 'POST', headers: { ...H, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: p.user_id, nome: p.data.name }) });
+      linhas.push(`${nome}: ${r.ok ? `LIBERADO (${p.data.name}, conta ${p.user_id.slice(0, 8)})` : `erro ${r.status}`}`);
+    }
+    continue;
+  }
   if (achados.length !== 1) { linhas.push(`${nome}: ${achados.length === 0 ? 'ninguém com esse nome' : `${achados.length} pessoas com esse nome, não liberei (${achados.map((a) => a.data.name).join(' / ')})`}`); continue; }
   const p = achados[0];
   const r = await fetch(`${base}/unlimited?on_conflict=user_id`, { method: 'POST', headers: { ...H, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: p.user_id, nome: p.data.name }) });
