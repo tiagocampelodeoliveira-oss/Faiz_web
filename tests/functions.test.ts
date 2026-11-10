@@ -49,6 +49,7 @@ const db = {
   google_tokens: [] as any[],
   cal_feeds: [] as any[],
   manual_push: [] as any[],
+  push_actions: [] as any[],
 };
 const pushed: any[] = [];
 let pushStatus = 201;
@@ -132,6 +133,33 @@ test('relógio manda o aviso da corrida às 18:20, e só uma vez', async () => {
   assert.equal(pushed.length, 1);
   assert.deepEqual(db.push_log.map((x) => [x.kind, x.host, x.status, x.ok]), [['t', 'web.push.apple.com', 201, true]], 'resultado do aviso registrado, sem o texto');
   assert.ok(!('title' in db.push_log[0]) && !('body' in db.push_log[0]));
+});
+
+test('aviso da atividade traz Feito e Adiar; o botão funciona sem abrir o app (assinado)', async () => {
+  const p = pushed[0];
+  assert.deepEqual(p.actions.map((a: any) => a.action), ['feito', 'adiar']);
+  assert.equal(p.act.u, U); assert.equal(p.act.t, 'b'); assert.equal(p.act.api, 'https://proj.supabase.co/functions/v1/api');
+  // assinatura errada: recusa
+  assert.equal((await post(api, { action: 'pushact', a: 'feito', ...p.act, sig: 'x'.repeat(64) })).status, 403);
+  // outra atividade com a mesma assinatura: recusa
+  assert.equal((await post(api, { action: 'pushact', a: 'feito', ...p.act, t: 'outra' })).status, 403);
+  // adiar às 18:20 (começa 18:30): vai para 18:45–19:45
+  const ad = await (await post(api, { action: 'pushact', a: 'adiar', ...p.act })).json();
+  assert.equal(ad.ok, true, JSON.stringify(ad));
+  let t = db.states[0].data.tasks.find((x: any) => x.id === 'b');
+  assert.deepEqual([t.start, t.end], [1125, 1185]);
+  // feito
+  const fe = await (await post(api, { action: 'pushact', a: 'feito', ...p.act })).json();
+  assert.equal(fe.ok, true);
+  t = db.states[0].data.tasks.find((x: any) => x.id === 'b');
+  assert.equal(t.status, 'feito');
+  assert.deepEqual(db.push_actions.map((x: any) => [x.task_id, x.action, x.start_min]), [['b', 'adiar', 1125], ['b', 'feito', 1125]]);
+  // o app pega a fila quando abrir
+  const q = await (await post(api, { action: 'acoes' }, { Authorization: 'Bearer user-token' })).json();
+  assert.deepEqual(q.acoes.map((x: any) => x.action), ['adiar', 'feito']);
+  assert.ok(db.push_actions.every((x: any) => x.applied_at));
+  // volta como era para os próximos testes
+  Object.assign(t, { status: undefined, start: 1110, end: 1170 }); delete t.status;
 });
 
 test('aviso pessoal do dono sai na hora marcada, uma vez só', async () => {

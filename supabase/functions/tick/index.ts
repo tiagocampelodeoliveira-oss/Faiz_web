@@ -1,6 +1,7 @@
 // Roda a cada minuto (pg_cron). Lê a agenda de cada pessoa e manda os avisos devidos.
 // Protegida por um segredo no cabeçalho x-tick-secret (publicada com --no-verify-jwt).
-import { json, rest, vapid } from '../_shared/env.ts';
+import { apiInfo, json, rest, vapid } from '../_shared/env.ts';
+import { assinar, segredoAcoes } from '../_shared/acoes.ts';
 import { dueNotices, voltaLer, voltaPrompt, type AppState, type Notice } from '../_shared/plan.ts';
 import { sendPush } from '../_shared/webpush.ts';
 
@@ -68,8 +69,16 @@ Deno.serve(async (req) => {
       const mine = new Set((won || []).map((w) => w.key));
       for (const n of due.filter((d) => mine.has(d.key))) {
         if (n.ia) await voltaIA(st.user_id, n);
+        const payload: Record<string, unknown> = { title: n.title, body: n.body, url: n.url, tag: n.tag };
+        // aviso de atividade: botões Feito e Adiar 15 min (Android e computador), assinados para esta pessoa e atividade
+        const segredo = segredoAcoes();
+        if (n.task && segredo) {
+          const exp = now.getTime() + 2 * 864e5, { api, k } = apiInfo();
+          payload.actions = [{ action: 'feito', title: '✅ Feito' }, { action: 'adiar', title: '⏰ Adiar 15 min' }];
+          payload.act = { api, k, u: st.user_id, t: n.task, exp, sig: await assinar(segredo, st.user_id, n.task, exp) };
+        }
         for (const s of byUser.get(st.user_id) || []) {
-          const r = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title: n.title, body: n.body, url: n.url, tag: n.tag }, keys, subject);
+          const r = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, keys, subject);
           await pushLog(st.user_id, n.key.split(':')[0], s.endpoint, r);
           if (r.ok) summary.sent++;
           else {

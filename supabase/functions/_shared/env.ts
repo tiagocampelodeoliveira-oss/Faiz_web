@@ -40,6 +40,11 @@ export async function getUser(req: Request): Promise<{ id: string } | null> {
   return u?.id ? { id: u.id } : null;
 }
 
+/** Endereço da função api e chave pública (vão no aviso para os botões Feito/Adiar falarem com o servidor). */
+export function apiInfo(): { api: string; k: string } {
+  return { api: `${URL_}/functions/v1/api`, k: ANON && !ANON.startsWith('sb_secret') ? ANON : '' };
+}
+
 export function vapid() {
   const publicKey = Deno.env.get('FAIZ_VAPID_PUBLIC') || '';
   const privateKey = Deno.env.get('FAIZ_VAPID_PRIVATE') || '';

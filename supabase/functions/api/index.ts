@@ -4,6 +4,7 @@ import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
 import { falar, ttsLigado } from '../_shared/tts.ts';
 import { localNow, trialInfo } from '../_shared/plan.ts';
+import { aplicarAcao, confere, segredoAcoes } from '../_shared/acoes.ts';
 import { buildIcs } from '../_shared/ics.ts';
 
 const AI_DAILY_LIMIT = 40;
@@ -251,6 +252,30 @@ async function nearby(body: Record<string, any>): Promise<Response> {
 }
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
+/** Botão do aviso: marca como feita ou adia 15 min, na agenda do servidor (os próximos avisos já saem certos)
+    e numa fila que o app aplica quando abrir (push_actions). */
+async function pushAct(b: Record<string, any>): Promise<Response> {
+  const u = String(b.u || ''), t = String(b.t || ''), a = String(b.a || ''), exp = Number(b.exp);
+  if (!/^[0-9a-f-]{36}$/.test(u) || !t || t.length > 120 || !['feito', 'adiar'].includes(a)) return json({ error: 'bad_request' }, 400);
+  if (!(await confere(segredoAcoes(), u, t, exp, String(b.sig || '')))) return json({ error: 'forbidden' }, 403);
+  const [st] = await rest(`states?user_id=eq.${u}&select=data`);
+  const r = st?.data ? aplicarAcao(st.data, t, a, new Date()) : null;
+  if (!r) return json({ error: 'not_found' }, 404);
+  // só a lista de tarefas muda no servidor; o resto do estado continua como o app mandou
+  await rest(`states?user_id=eq.${u}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ data: r.data }) });
+  await rest('push_actions', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: u, task_id: t, action: a, date: r.mudou?.date ?? null, start_min: r.mudou?.start ?? null, end_min: r.mudou?.end ?? null }) });
+  return json({ ok: true, title: r.title, body: r.body });
+}
+
+/** O que a pessoa fez pelos botões do aviso e o app ainda não aplicou (entrega uma vez só). */
+async function acoesPendentes(userId: string): Promise<Response> {
+  const rows: { id: number; task_id: string; action: string; date: string | null; start_min: number | null; end_min: number | null }[] =
+    await rest(`push_actions?user_id=eq.${userId}&applied_at=is.null&select=id,task_id,action,date,start_min,end_min&order=id.asc&limit=50`);
+  if (!rows?.length) return json({ acoes: [] });
+  await rest(`push_actions?id=in.(${rows.map((r) => r.id).join(',')})`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ applied_at: new Date().toISOString() }) });
+  return json({ acoes: rows.map((r) => ({ task_id: r.task_id, action: r.action, date: r.date, start: r.start_min, end: r.end_min })) });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method === 'GET') {
@@ -276,8 +301,11 @@ Deno.serve(async (req) => {
     if (action === 'config') {
       return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY'), tts: ttsLigado(), google: !!(GOOGLE_ID() && GOOGLE_SECRET()), aiCredit: !(await aiCreditEmpty()) });
     }
+    // botões do aviso (Feito / Adiar): sem login, vale a assinatura que foi junto no aviso
+    if (action === 'pushact') return await pushAct(body);
     const user = await getUser(req);
     if (!user) return json({ error: 'auth' }, 401);
+    if (action === 'acoes') return await acoesPendentes(user.id);
     if (action === 'ai') return await ai(user.id, body.prompt, body.system);
     if (action === 'subscribe') return await subscribe(user.id, body.subscription, req.headers.get('user-agent') || '');
     if (action === 'test') return await testPush(user.id);

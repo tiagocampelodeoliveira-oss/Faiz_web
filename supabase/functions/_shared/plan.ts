@@ -36,7 +36,8 @@ export type AppState = {
 
 export type Bill = { id: string; tipo: 'conta' | 'renda'; nome: string; valor: number; dia: number; desde?: string; ate?: string; freq?: 'mensal' | 'semanal' | 'anual'; mes?: number; dow?: number };
 
-export type Notice = { key: string; title: string; body: string; url: string; tag: string; ia?: VoltaCtx };
+/** `task`: aviso de uma atividade (não do Google): leva os botões Feito e Adiar 15 min. */
+export type Notice = { key: string; title: string; body: string; url: string; tag: string; ia?: VoltaCtx; task?: string };
 
 /** Situação da pessoa para a IA escrever o aviso de volta (sem conversas e sem valores de dinheiro). */
 export type VoltaCtx = {
@@ -202,14 +203,14 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
     }
     if (isReminder) {
       if (min >= t.start && min < t.start + 30)
-        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: IRIS.lembrete.at(v)!, url, tag });
+        add({ key: `${base}:r`, title: `Lembrete: ${t.title}`, body: IRIS.lembrete.at(v)!, url, tag, task: t.id });
       else if (min >= t.start + 30 && min < t.start + 60)
-        add({ key: `${base}:r2`, title: IRIS.insiste(k).at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag });
+        add({ key: `${base}:r2`, title: IRIS.insiste(k).at(v)!, body: `${t.title}. Toque para marcar como feito ou adiar.`, url, tag, task: t.id });
       continue;
     }
     // 1 hora antes (atividades de 1 hora ou mais, quando a antecedência é menor que 1 hora)
     if (on('umaHora') && dur >= 60 && lead < 50 && min >= t.start - 60 && min < t.start - 50)
-      add({ key: `${base}:60`, title: IRIS.umaHora(t.title).at(v)!, body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''}`, url, tag });
+      add({ key: `${base}:60`, title: IRIS.umaHora(t.title).at(v)!, body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''}`, url, tag, task: t.id });
     // antes de começar
     if (min >= t.start - lead && min < t.start) {
       const left = t.start - min;
@@ -218,16 +219,16 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
         key: `${base}:${lead}`,
         title: `${t.title} em ${left} min ⏰`,
         body: `${range(t)}.${next ? ` Depois, ${lcFirst(next.title)} às ${fmt(next.start!)}.` : ''} ${seq >= 2 ? IRIS.sequencia(seq).trim() : IRIS.antes[tom(k)].at(v)}`,
-        url, tag,
+        url, tag, task: t.id,
       });
     }
     // na hora: se ainda não marcou como feito
     else if (min >= t.start && min < t.start + 20 && t.status !== 'andamento') {
-      add({ key: `${base}:s`, title: IRIS.naHora(t.title, k).at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.${k >= BRONCA ? IRIS.furando(k) : ''}`, url, tag });
+      add({ key: `${base}:s`, title: IRIS.naHora(t.title, k).at(v)!, body: `${range(t)}. Toque para marcar como feito ou adiar 15 min.${k >= BRONCA ? IRIS.furando(k) : ''}`, url, tag, task: t.id });
     }
     // no fim: confere se fez (atividades de 20 min ou mais)
     if (on('conferir') && dur >= 20 && min >= t.start + dur && min < t.start + dur + 30)
-      add({ key: `${base}:f`, title: IRIS.conferir(t.title).at(v)!, body: IRIS.conferirCorpo.at(v)!, url, tag });
+      add({ key: `${base}:f`, title: IRIS.conferir(t.title).at(v)!, body: IRIS.conferirCorpo.at(v)!, url, tag, task: t.id });
   }
 
   // 1b. Véspera, às 20:00: o que começa cedo amanhã (antes das 10h).

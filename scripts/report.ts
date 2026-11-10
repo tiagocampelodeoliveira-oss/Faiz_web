@@ -67,6 +67,12 @@ const pessoas = states
       gastosNoCredito: (d.fin?.mov ?? []).filter((x: any) => x?.forma === 'credito').length,
       faturasPagas: (d.fin?.faturas ?? []).length,
       contasSemanaisOuAnuais: (d.fin?.fixas ?? []).filter((x: any) => x?.freq === 'semanal' || x?.freq === 'anual').length,
+      // desde 10/11: editar tocando na atividade, criar direto (sem Confirmar), ícone de avaliar, mini tutorial, botões do aviso
+      edicoes: st.edits || 0,
+      criadosDireto: st.direto || 0,
+      abriuAvaliar: st.avaliar || 0,
+      tutorial: st.tutorial ? (st.tutorial.viu ? 'viu até o fim' : `pulou no passo ${st.tutorial.parouEm || '?'}`) : 'ainda não',
+      botoesDoAviso: st.pushActs || 0,
       pesquisa3: d.survey?.d3 || null,
       pesquisa7: d.survey?.d7 || null,
     };

@@ -380,6 +380,7 @@ test('compromisso do Google Agenda: só um aviso antes; nunca cobra, nunca conta
   const antes = em('07:52');
   assert.equal(antes.length, 1);
   assert.match(antes[0].title, /^Aula 3º ano em 8 min 📅$/);
+  assert.equal(antes[0].task, undefined, 'aviso do Google não tem os botões Feito/Adiar');
   assert.doesNotMatch(antes[0].body, /furando|sacanagem|sequência/i);
   assert.equal(em('08:05').length, 0, 'na hora não cobra');
   assert.equal(em('08:52').length, 0, 'no fim não pergunta');
@@ -390,4 +391,16 @@ test('compromisso do Google Agenda: só um aviso antes; nunca cobra, nunca conta
   assert.match(noite[0].body, /fez tudo hoje \(1 de 1\)/, 'revisão só olha as tarefas do Faiz');
   const vesp = dueNotices({ ...st, tasks: [g('gam', '2026-11-07', 7 * 60)] }, at('2026-11-06', '20:10'), new Set()).filter((n) => n.tag === 'vespera');
   assert.equal(vesp.length, 0, 'véspera não repete a aula do Google');
+});
+
+test('avisos de atividade do Faiz levam a atividade (botões Feito e Adiar)', () => {
+  const st = { settings: { tz: SP }, tasks: [{ id: 'c1', title: 'Corrida', date: '2026-11-10', start: 18 * 60 + 30, end: 19 * 60 + 30, status: 'pendente' }, { id: 'l1', title: 'Pagar a luz', date: '2026-11-10', start: 9 * 60, tag: 'Lembrete', status: 'pendente' }] } as any;
+  const antes = dueNotices(st, at('2026-11-10', '18:20'), new Set()).filter((n) => n.tag === 't-c1');
+  const hora = dueNotices(st, at('2026-11-10', '18:35'), new Set()).filter((n) => n.tag === 't-c1');
+  const lemb = dueNotices(st, at('2026-11-10', '09:00'), new Set()).filter((n) => n.tag === 't-l1');
+  assert.ok(antes.length && antes.every((n) => n.task === 'c1'));
+  assert.ok(hora.length && hora.every((n) => n.task === 'c1'));
+  assert.ok(lemb.length && lemb.every((n) => n.task === 'l1'));
+  const manha = dueNotices(st, at('2026-11-10', '07:31'), new Set()).filter((n) => n.tag === 'manha');
+  assert.ok(manha.every((n) => !n.task), 'resumo da manhã não tem botões');
 });

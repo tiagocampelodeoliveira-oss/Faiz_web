@@ -144,3 +144,18 @@ create table if not exists public.manual_push (
   created_at timestamptz not null default now()
 );
 alter table public.manual_push enable row level security;
+
+-- Botões do aviso (Feito / Adiar 15 min): o que a pessoa tocou sem abrir o app. O app aplica ao abrir (ação "acoes").
+create table if not exists public.push_actions (
+  id bigserial primary key,
+  user_id uuid not null references auth.users on delete cascade,
+  task_id text not null,
+  action text not null,
+  date text,
+  start_min int,
+  end_min int,
+  created_at timestamptz not null default now(),
+  applied_at timestamptz
+);
+create index if not exists push_actions_user on public.push_actions (user_id) where applied_at is null;
+alter table public.push_actions enable row level security;
