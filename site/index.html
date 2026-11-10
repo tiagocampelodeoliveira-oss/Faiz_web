@@ -503,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 12:04';
+const APP_VERSION = '2026-11-10 12:19';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -793,7 +793,7 @@ async function updatePushState() { U.pushState = await Push.state(); render(true
   await acoesDoAviso();
   if (S.onboarded && integ('agenda')) agendaSync();
   if (S.onboarded && integ('tarefas')) tarefasSync();
-  if (S.onboarded) { Cloud.push(); Push.refresh().then(updatePushState); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; U.trialOver = false; if (m.plano) U.plano = m.plano; render(true); }).catch(() => {}); }
+  if (S.onboarded) { Cloud.push(); Push.refresh().then(updatePushState); Cloud.fn('me').then((m) => { U.owner = !!m.owner; if (m.aiCredit === false) U.aiCredit = false; U.trialOver = false; if (m.plano) U.plano = m.plano; U.meFeito = true; render(true); }).catch(() => { U.meFeito = true; render(true); }); }
   updatePushState();
 })();
 
@@ -1189,7 +1189,7 @@ function sheet(html, onMount) {
   $overlay.querySelector('.sheet-bg').addEventListener('click', (e) => { if (e.target.dataset.close) closeSheet(); });
   onMount && onMount($overlay.querySelector('.sheet'));
 }
-const closeSheet = () => { $overlay.innerHTML = ''; };
+const closeSheet = () => { $overlay.innerHTML = ''; try { planosWatch(); } catch (e) {} };
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
 /* ---------- Tarefas ---------- */
 /** Aplica na agenda. Tirar uma vez de uma rotina marca o dia como pulado (senão a rotina recria); desfazer tira a marca. */
@@ -2322,12 +2322,13 @@ async function planoAtualiza() {
   try { const r = await Cloud.fn('plano'); if (r?.plano) { U.plano = r.plano; render(true); } } catch (e) {}
 }
 function planosScreen(obrig) {
+  const soTeste = obrig === 'teste'; // gente nova: vê os planos e começa os 7 dias grátis do Plus
   if (document.getElementById('planos') || !U.plano || (U.plano.plano === 'livre' && !U.plano.cobranca)) return;
   const p = U.plano, fund = p.fundador;
   const el = document.createElement('div');
   el.className = 'planos'; el.id = 'planos'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Planos do Faiz');
   const check = (t) => `<li><i>✓</i><span>${t}</span></li>`;
-  const intro = p.plano === 'livre' ? `Você está liberada pelo time do Faiz 💜 e foi escolhida para testar o pagamento do Plus (<b>${brl2(p.preco)}</b>). Sua conta continua liberada de qualquer jeito.` : fund
+  const intro = soTeste ? `Você ganhou <b>7 dias grátis do Plus</b>${p.fimTeste ? ', até ' + L.ddmm(p.fimTeste) : ''} 🎉 Aproveita tudo. Depois você escolhe entre o Plus e o Grátis.` : p.plano === 'livre' ? `Você está liberada pelo time do Faiz 💜 e foi escolhida para testar o pagamento do Plus (<b>${brl2(p.preco)}</b>). Sua conta continua liberada de qualquer jeito.` : fund
     ? `Você testou o Faiz desde o começo 💜 Agora você escolhe: o Plus sai por <b>${brl2(p.preco)} por mês</b>. Se preferir o Grátis, sua rotina continua, mas sem a minha inteligência.`
     : p.plano === 'teste' ? `Você está nos 7 dias grátis do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}. Depois, escolhe como continuar.` : 'Seus 7 dias de Plus acabaram. Escolha como continuar:';
   el.innerHTML = `<div class="ptop"><span class="row" style="gap:8px">${LOGO}<b style="font-family:var(--f-display);font-size:22px;color:var(--navy)">faiz</b></span>${obrig ? '' : '<button class="round" type="button" data-pl="fechar" aria-label="Fechar">' + I.x + '</button>'}</div>
@@ -2335,12 +2336,12 @@ function planosScreen(obrig) {
       <h1>Grátis para organizar. Plus para resolver por você.</h1>
       <div class="pintro">${irisImg('comemorando', 40)}<span>${intro}</span></div>
       <div class="pcard plus">
-        <div class="pname">Faiz Plus<span class="badge">${p.cobranca ? 'Cancela quando quiser' : 'Cobrança só em dezembro'}</span></div>
+        <div class="pname">Faiz Plus<span class="badge">${soTeste ? '7 dias grátis' : p.cobranca ? 'Cancela quando quiser' : 'Cobrança só em dezembro'}</span></div>
         <div class="price">${brl2(p.preco)}<small>/mês</small></div>
         <p class="psub">Para o Faiz resolver por você.</p>
         <ul>${[ 'Íris com IA: entende do seu jeito e monta rotinas, treinos e cronogramas', 'Até 40 mensagens por dia com a Íris', 'Reorganiza o que ficou atrasado', 'Voz da Íris respondendo em voz alta', 'Google Agenda, Tarefas, Contatos e Gmail', 'Contas e todos os avisos'].map(check).join('')}</ul>
-        <button class="btn" type="button" data-pl="plus">${p.assinatura === 'authorized' ? 'Seu plano atual' : p.cobranca ? `Assinar no cartão · ${brl2(p.preco)}/mês` : p.escolha === 'plus' ? 'Seu plano atual' : 'Quero o Plus'}</button>
-        ${p.cobranca && p.assinatura !== 'authorized' ? `<button class="btn soft" type="button" data-pl="pix" style="margin-top:8px">${p.forma === 'pix' ? 'Renovar com Pix' : 'Pagar 1 mês com Pix'} · ${brl2(p.preco)}</button><p class="meta" style="margin:8px 0 0;text-align:center">${p.forma === 'pix' ? `Seu Plus está pago até ${L.ddmm(p.ate)}. Renovando agora, os 30 dias somam depois dessa data.` : 'Cartão renova sozinho todo mês. Pix vale 30 dias e eu te lembro de renovar.'}</p>` : ''}
+        ${soTeste ? '<button class="btn" type="button" data-pl="comecar">Começar meus 7 dias grátis</button><p class="meta" style="margin:8px 0 0;text-align:center">Sem cartão. Nada é cobrado nesses 7 dias.</p>' : `<button class="btn" type="button" data-pl="plus">${p.assinatura === 'authorized' ? 'Seu plano atual' : p.cobranca ? `Assinar no cartão · ${brl2(p.preco)}/mês` : p.escolha === 'plus' ? 'Seu plano atual' : 'Quero o Plus'}</button>
+        ${p.cobranca && p.assinatura !== 'authorized' ? `<button class="btn soft" type="button" data-pl="pix" style="margin-top:8px">${p.forma === 'pix' ? 'Renovar com Pix' : 'Pagar 1 mês com Pix'} · ${brl2(p.preco)}</button><p class="meta" style="margin:8px 0 0;text-align:center">${p.forma === 'pix' ? `Seu Plus está pago até ${L.ddmm(p.ate)}. Renovando agora, os 30 dias somam depois dessa data.` : 'Cartão renova sozinho todo mês. Pix vale 30 dias e eu te lembro de renovar.'}</p>` : ''}`}
       </div>
       <div class="pcard">
         <div class="pname">Faiz</div>
@@ -2348,9 +2349,9 @@ function planosScreen(obrig) {
         <p class="psub">Para organizar o dia.</p>
         <ul>${['Sua agenda e as rotinas que você já montou continuam', 'Avisos no celular, tarefas e rotinas', 'Contas: anotar gastos e contas fixas', 'Íris no modo simples, sem IA: entende só frases diretas, tipo “corrida amanhã às 7”'].map(check).join('')}</ul>
         <p class="meta" style="margin:-6px 0 14px">Fica de fora: a Íris com IA, a voz da Íris e o Google.</p>
-        <button class="btn soft" type="button" data-pl="gratis">${p.escolha === 'gratis' ? 'Seu plano atual' : 'Continuar no Grátis'}</button>
+        ${soTeste ? '<p class="meta" style="margin:0;text-align:center">Depois dos 7 dias, você escolhe entre o Plus e o Grátis.</p>' : `<button class="btn soft" type="button" data-pl="gratis">${p.escolha === 'gratis' && !p.precisaEscolher ? 'Seu plano atual' : 'Continuar no Grátis'}</button>`}
       </div>
-      <p class="pnote">${p.cobranca ? `O pagamento é pelo Mercado Pago: no cartão, todo mês a partir do dia em que você assina (dá para cancelar quando quiser em Mais › Seu plano), ou por Pix, um mês por vez. O Faiz não vê os dados do seu cartão.${p.pagarAte && !p.pago ? ` Seu Plus reservado vale até ${L.ddmm(p.pagarAte)}.` : ''}` : 'A cobrança ainda não começou. Escolhendo o Plus, você garante esse preço e segue com o Plus liberado de graça até a cobrança começar, em dezembro. Antes de cobrar a gente avisa, e dá para desistir.'}</p>
+      <p class="pnote">${soTeste ? 'Depois dos 7 dias, o Plus custa ' + brl2(p.preco) + ' por mês (cartão ou Pix, pelo Mercado Pago) e o Grátis continua de graça. Você escolhe na hora.' : p.cobranca ? `O pagamento é pelo Mercado Pago: no cartão, todo mês a partir do dia em que você assina (dá para cancelar quando quiser em Mais › Seu plano), ou por Pix, um mês por vez. O Faiz não vê os dados do seu cartão.${p.pagarAte && !p.pago ? ` Seu Plus reservado vale até ${L.ddmm(p.pagarAte)}.` : ''}` : 'A cobrança ainda não começou. Escolhendo o Plus, você garante esse preço e segue com o Plus liberado de graça até a cobrança começar, em dezembro. Antes de cobrar a gente avisa, e dá para desistir.'}</p>
     </div>`;
   document.body.appendChild(el);
   U.planosAberto = true; S.stats.planosVistos = (S.stats.planosVistos || 0) + 1; save();
@@ -2359,12 +2360,13 @@ function planosScreen(obrig) {
     const b = e.target.closest('[data-pl]'); if (!b) return;
     if (b.dataset.pl === 'fechar') return fecha();
     const escolha = b.dataset.pl;
+    if (escolha === 'comecar') { S.planosTeste = today(); save(); fecha(); return toast('Seus 7 dias de Plus começaram 🎉'); }
     if (escolha === 'pix') { fecha(); return pixPlus(); }
     if (escolha === 'gratis' && U.plano.plano === 'livre') return fecha();
     if (escolha === 'plus' && U.plano.assinatura === 'authorized') return fecha();
     if (escolha === 'plus' && U.plano.cobranca) { fecha(); return assinarPlus(); }
     if (escolha === 'plus' && U.plano.pago) return fecha();
-    if (U.plano.escolha === escolha && !(escolha === 'gratis' && U.plano.assinatura === 'authorized')) return fecha();
+    if (U.plano.escolha === escolha && !U.plano.precisaEscolher && !(escolha === 'gratis' && U.plano.assinatura === 'authorized')) return fecha();
     if (escolha === 'gratis' && U.plano.assinatura === 'authorized') { fecha(); return cancelarPlus(); }
     b.disabled = true; b.textContent = 'Salvando...';
     try {
@@ -2379,11 +2381,19 @@ function planosScreen(obrig) {
     } catch (err) { b.disabled = false; b.textContent = escolha === 'plus' ? 'Quero o Plus' : 'Continuar no Grátis'; toast('Não consegui salvar agora. Confira a internet e tente de novo.'); }
   });
 }
-/** A cada render: quem precisa escolher o plano vê a tela (depois do tutorial e sem nada aberto por cima). */
+/** A cada render: a tela de planos é a primeira coisa que aparece (antes do tutorial) para quem precisa escolher ou pagar,
+    e uma vez para gente nova começar os 7 dias grátis. Pedido do Tiago, 10/11. */
+function planosModo() {
+  const p = U.plano; if (!p || !S.onboarded) return null;
+  if (p.precisaEscolher) return true;
+  if (p.plano === 'teste' && !p.fundador && !p.pago && !S.planosTeste) return 'teste';
+  return null;
+}
 function planosWatch() {
-  if (!U.plano?.precisaEscolher || U.planosAberto || !S.tutorialSeen || !S.onboarded) return;
+  const m = planosModo();
+  if (!m || U.planosAberto || U.pagando) return;
   if (document.getElementById('coach') || $overlay.innerHTML || /[?&](t|v)=/.test(location.search)) return;
-  setTimeout(() => { if (U.plano?.precisaEscolher && !U.planosAberto && !$overlay.innerHTML && !document.getElementById('coach')) planosScreen(true); }, 600);
+  setTimeout(() => { const m2 = planosModo(); if (m2 && !U.planosAberto && !U.pagando && !$overlay.innerHTML && !document.getElementById('coach')) planosScreen(m2); }, 400);
 }
 
 /* ---------- Pagamento do Plus (Mercado Pago) ----------
@@ -2404,13 +2414,15 @@ async function assinarPlus() {
   if (!S.account?.google) return precisaGoogleSheet();
   S.stats.assinar = (S.stats.assinar || 0) + 1; save();
   toast('Abrindo o Mercado Pago...');
+  U.pagando = true; const solta = () => { U.pagando = false; render(true); };
   try {
     const r = await Cloud.fn('assinar', { nome: S.name });
-    if (r?.ja) { if (r.plano) U.plano = r.plano; render(true); return toast('Seu Plus já está pago ✅'); }
+    if (r?.ja) { if (r.plano) U.plano = r.plano; solta(); return toast('Seu Plus já está pago ✅'); }
     if (!r?.url) throw new Error('sem link');
     S.stats.assinarAbriu = (S.stats.assinarAbriu || 0) + 1; clearTimeout(saveT); persistLocal(); await Cloud.push();
     location.href = r.url;
   } catch (e) {
+    solta();
     if (e?.code === 'precisa_google') return precisaGoogleSheet();
     if (e?.code === 'cobranca_off') return toast('O pagamento ainda não começou. Seu Plus segue liberado 💜');
     toast('Não consegui abrir o pagamento agora. Tente de novo daqui a pouco.');
@@ -2418,20 +2430,23 @@ async function assinarPlus() {
 }
 /** Voltou do Mercado Pago: confere no servidor (o pagamento pode levar alguns segundos para confirmar). */
 async function assinaturaVoltou(tentativa = 0) {
+  U.pagando = true;
   try {
     const r = await Cloud.fn('assinatura');
     if (r?.plano) U.plano = r.plano;
     render(true);
     const p = U.plano || {};
     if (p.pago && p.assinatura === 'authorized') {
+      U.pagando = false;
       S.stats.assinou = new Date().toISOString(); save();
       return sheet(`<div class="row" style="gap:10px">${irisImg('comemorando', 56)}<div class="sub" style="flex:1"><b>Pagamento confirmado! 🎉</b></div></div>
         <p style="margin:0">Seu Plus está ativo. ${p.proximo ? `A próxima cobrança é em ${L.ddmm(p.proximo)}.` : 'A cobrança é todo mês, nesse mesmo dia.'} Dá para cancelar quando quiser em Mais › Seu plano.</p>
         <button class="btn" type="button" data-close-sheet>Bora!</button>`, (s2) => { s2.querySelector('[data-close-sheet]').onclick = closeSheet; });
     }
     if (tentativa < 3) { if (!tentativa) toast('Conferindo o pagamento no Mercado Pago...'); return setTimeout(() => assinaturaVoltou(tentativa + 1), 8000); }
+    U.pagando = false; render(true);
     toast(p.assinatura === 'pending' ? 'O Mercado Pago ainda não confirmou. Se você pagou, o Plus entra sozinho em alguns minutos.' : 'O pagamento não foi concluído. Dá para tentar de novo em Mais › Seu plano.');
-  } catch (e) { toast('Não consegui conferir o pagamento agora. Ele aparece em Mais › Seu plano.'); }
+  } catch (e) { U.pagando = false; render(true); toast('Não consegui conferir o pagamento agora. Ele aparece em Mais › Seu plano.'); }
 }
 /** Pix de 1 mês: mostra o QR code e o copia-e-cola e fica conferindo até o Pix cair (o código vale 30 minutos). */
 let pixT = null;
@@ -2529,6 +2544,9 @@ let coachTry = 0;
 /** Chamado a cada render: na primeira vez na tela principal, agenda o tutorial (uma vez só). */
 function coachWatch() {
   if (S.tutorialSeen || U.coachPending || !S.onboarded || document.getElementById('coach') || /[?&](t|v)=/.test(location.search)) return;
+  // os planos vêm antes do tutorial: espera o servidor dizer o plano (no máximo 6 s) e a tela de planos fechar
+  if (Cloud.on && !U.meFeito) { if (!U.meEspera) U.meEspera = setTimeout(() => { U.meFeito = true; render(true); }, 6000); return; }
+  if (U.planosAberto || U.pagando || planosModo()) return;
   U.coachPending = true; coachTry = 0;
   setTimeout(() => startCoach(false), 900);
 }
@@ -3291,7 +3309,9 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]'); if (!el || !$app.contains(el)) return;
   const a = el.dataset.act, v = el.dataset.v, id = el.dataset.id;
   switch (a) {
-    case 'start': { const n = document.getElementById('nameInput').value.trim(); S.name = n; S.onboarded = true; S.startDate = today(); save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0); break; }
+    case 'start': { const n = document.getElementById('nameInput').value.trim(); S.name = n; S.onboarded = true; S.startDate = today(); save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0);
+      // gente nova: grava a conta no servidor e já busca o plano (a tela de planos é a primeira coisa que aparece)
+      clearTimeout(saveT); persistLocal(); Cloud.push().catch(() => {}).finally(() => planoAtualiza().finally(() => { U.meFeito = true; render(true); })); break; }
     case 'skipinstall': S.skipInstall = true; U.showInstall = false; save(); render(); window.scrollTo(0, 0); break;
     case 'showinstall': U.showInstall = true; render(); window.scrollTo(0, 0); break;
     case 'permit': case 'notify': enableNotify(a === 'permit'); break;

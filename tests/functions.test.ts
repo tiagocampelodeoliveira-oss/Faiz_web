@@ -418,7 +418,7 @@ test('api: planos — Grátis não tem IA, voz nem Google; escolher o Plus reser
     assert.equal(db.planos.length, 1); assert.equal(db.planos[0].escolha, 'plus'); assert.equal(db.planos[0].preco, 990);
     db.planos = [{ escolha: 'plus' }];
     me = await (await post(api, { action: 'me' }, auth)).json();
-    assert.equal(me.plano.plano, 'plus'); assert.equal(me.plano.precisaEscolher, false);
+    assert.equal(me.plano.plano, 'plus'); assert.equal(me.plano.precisaEscolher, true, 'cobrança ligada: reservou e ainda não pagou, a tela de planos continua aparecendo'); assert.equal(me.plano.cobranca, true);
     db.usage = [{ n: 5 }]; models.length = 0;
     assert.equal((await post(api, { action: 'ai', prompt: 'monta meu treino', modelo: 'completa' }, auth)).status, 200);
     assert.deepEqual(models, ['claude-sonnet-5-5']);
@@ -474,7 +474,7 @@ test('planos com cobrança: reserva vale até 7 dias depois de ligar; quem paga 
   p = planoDe({ ...base, escolha: 'plus', cobrancaDesde: '2026-12-01' });
   assert.equal(p.plano, 'plus'); assert.equal(p.cobranca, true); assert.equal(p.pagarAte, '2026-12-08');
   p = planoDe({ ...base, now: new Date('2026-12-09T15:00:00Z'), escolha: 'plus', cobrancaDesde: '2026-12-01' });
-  assert.equal(p.plano, 'gratis'); assert.equal(p.precisaEscolher, false);
+  assert.equal(p.plano, 'gratis'); assert.equal(p.precisaEscolher, true, 'reservou e não pagou: vê a tela até pagar ou escolher o Grátis');
   // pagou: Plus, sem prazo
   p = planoDe({ ...base, now: new Date('2026-12-20T15:00:00Z'), escolha: 'plus', cobrancaDesde: '2026-12-01', assinatura: { status: 'authorized', proximo: '2027-01-05' } });
   assert.equal(p.plano, 'plus'); assert.equal(p.pago, true); assert.equal(p.pagarAte, null); assert.equal(p.proximo, '2027-01-05');
@@ -500,7 +500,7 @@ test('api: assinatura no Mercado Pago — cria, confere pelo aviso, cancela; nun
     assert.equal((await (await post(api, { action: 'assinar' }, authMail)).json()).error, 'mp_off');
     env.FAIZ_MP_TOKEN = 'APP_USR-teste';
     const off = await post(api, { action: 'assinar' }, authMail);
-    assert.equal(off.status, 403); assert.equal((await off.json()).error, 'cobranca_off', 'cobrança desligada: só o dono testa');
+    assert.equal(off.status, 200, 'cobrança ligada: qualquer pessoa pode assinar'); mpCalls.length = 0; db.assinaturas = [];
     db.owners = [{ user_id: U }];
     const sem = await post(api, { action: 'assinar' }, auth);
     assert.equal(sem.status, 409); assert.equal((await sem.json()).error, 'precisa_google');
@@ -602,9 +602,28 @@ test('api: pessoa escolhida para testar o pagamento vê o botão de pagar mesmo 
   setNow('2026-11-11T15:00:00Z');
   try {
     let me = await (await post(api, { action: 'me' }, auth)).json();
-    assert.equal(me.plano.plano, 'livre'); assert.equal(me.plano.cobranca, false);
+    assert.equal(me.plano.plano, 'livre'); assert.equal(me.plano.precisaEscolher, false, 'liberada nunca é obrigada a escolher');
     db.pagar_teste = [{ user_id: U }];
     me = await (await post(api, { action: 'me' }, auth)).json();
     assert.equal(me.plano.plano, 'livre', 'continua liberada (não perde a IA)'); assert.equal(me.plano.cobranca, true); assert.equal(me.plano.pago, false);
   } finally { Object.assign(db, antes); }
+});
+
+test('cobrança ligada: a tela de planos é obrigatória para quem já testava até pagar ou escolher o Grátis; gente nova tem 7 dias antes', () => {
+  const n = new Date('2026-11-12T15:00:00Z'), d = '2026-11-10';
+  const velho = { startDate: '2026-11-01', livre: false, now: n, tz: 'America/Sao_Paulo', cobrancaDesde: d };
+  assert.equal(planoDe({ ...velho, escolha: null }).precisaEscolher, true, 'nunca escolheu');
+  assert.equal(planoDe({ ...velho, escolha: 'plus', escolhidoEm: '2026-11-10T02:00:00Z' }).precisaEscolher, true, 'reservou o Plus mas não pagou');
+  assert.equal(planoDe({ ...velho, escolha: 'gratis', escolhidoEm: '2026-11-09T20:00:00Z' }).precisaEscolher, true, 'escolheu o Grátis antes de a cobrança ligar: vê mais uma vez');
+  assert.equal(planoDe({ ...velho, escolha: 'gratis', escolhidoEm: '2026-11-11T20:00:00Z' }).precisaEscolher, false, 'escolheu o Grátis depois: não incomoda mais');
+  assert.equal(planoDe({ ...velho, escolha: 'plus', assinatura: { status: 'authorized' } }).precisaEscolher, false, 'pagou no cartão');
+  assert.equal(planoDe({ ...velho, escolha: 'plus', assinatura: { status: 'pix', pix_ate: '2026-12-10' } }).precisaEscolher, false, 'pagou no Pix');
+  assert.equal(planoDe({ ...velho, escolha: 'plus', assinatura: { status: 'pix', pix_ate: '2026-11-11' } }).precisaEscolher, true, 'Pix venceu e não renovou: escolhe de novo');
+  assert.equal(planoDe({ ...velho, livre: true, escolha: null }).precisaEscolher, false, 'liberada pelo time');
+  // gente nova (entrou depois de 10/11): 7 dias de Plus sem escolher; no 8º dia a tela vira obrigatória
+  const novo = { startDate: '2026-11-11', livre: false, tz: 'America/Sao_Paulo', cobrancaDesde: d, escolha: null };
+  let p = planoDe({ ...novo, now: new Date('2026-11-12T15:00:00Z') });
+  assert.equal(p.plano, 'teste'); assert.equal(p.precisaEscolher, false); assert.equal(p.cobranca, true); assert.equal(p.fimTeste, '2026-11-17');
+  p = planoDe({ ...novo, now: new Date('2026-11-18T15:00:00Z') });
+  assert.equal(p.plano, 'gratis'); assert.equal(p.precisaEscolher, true);
 });

@@ -23,12 +23,12 @@ async function planoUser(userId: string): Promise<PlanoInfo> {
   const [livre, row, esc, ass, dono] = await Promise.all([
     semLimite(userId),
     rest(`states?user_id=eq.${userId}&select=start:data->>startDate,tz:data->settings->>tz`).then((r: any) => r?.[0]),
-    rest(`planos?user_id=eq.${userId}&select=escolha`).then((r: any) => r?.[0]?.escolha ?? null).catch(() => null),
+    rest(`planos?user_id=eq.${userId}&select=escolha,escolhido_em`).then((r: any) => r?.[0] ?? null).catch(() => null),
     rest(`assinaturas?user_id=eq.${userId}&select=status,ate,proximo,pix_ate`).then((r: any) => r?.[0] ?? null).catch(() => null),
     // dono do teste, ou pessoa escolhida pelo Tiago para testar o pagamento antes de ligar a cobrança para todos
     Promise.all([rest(`owners?user_id=eq.${userId}&select=user_id`).catch(() => []), rest(`pagar_teste?user_id=eq.${userId}&select=user_id`).catch(() => [])]).then(([o, t]: any) => !!(o?.length || t?.length)),
   ]);
-  return planoDe({ startDate: row?.start, escolha: esc, livre, now: new Date(), tz: row?.tz || 'America/Sao_Paulo', assinatura: ass, dono });
+  return planoDe({ startDate: row?.start, escolha: esc?.escolha ?? null, escolhidoEm: esc?.escolhido_em ?? null, livre, now: new Date(), tz: row?.tz || 'America/Sao_Paulo', assinatura: ass, dono });
 }
 
 /* ---------- Assinatura no Mercado Pago ---------- */

@@ -367,7 +367,7 @@ export const PRECO = { fundador: 990, plus: 990 };
 /** Dia em que a cobrança foi ligada (AAAA-MM-DD), ou null = desligada (só o dono pode testar o pagamento).
  *  Quem reservou o Plus e ainda não pagou fica no Plus por mais PAGAR_DIAS depois de ligar. Cada pessoa paga a partir do dia
  *  em que confirma o pagamento (decisão do Tiago, 10/11). */
-export const COBRANCA_DESDE: string | null = null;
+export const COBRANCA_DESDE: string | null = '2026-11-10'; // ligada em 10/11/2026 (decisão do Tiago)
 export const PAGAR_DIAS = 7;
 /** Assinatura no Mercado Pago (tabela assinaturas): status do MP e até quando já está pago (se cancelou). */
 export type Assinatura = { status: string; ate?: string | null; proximo?: string | null; pix_ate?: string | null };
@@ -394,7 +394,7 @@ export type PlanoInfo = {
   /** reservou o Plus e precisa pagar até esta data para continuar (só com a cobrança ligada) */
   pagarAte: string | null;
 };
-export function planoDe(o: { startDate?: string; escolha?: string | null; livre: boolean; now: Date; tz?: string; assinatura?: Assinatura | null; cobrancaDesde?: string | null; dono?: boolean }): PlanoInfo {
+export function planoDe(o: { startDate?: string; escolha?: string | null; escolhidoEm?: string | null; livre: boolean; now: Date; tz?: string; assinatura?: Assinatura | null; cobrancaDesde?: string | null; dono?: boolean }): PlanoInfo {
   const t = trialInfo(o.startDate, o.now, o.tz || 'America/Sao_Paulo');
   const hoje = localNow(o.now, o.tz || 'America/Sao_Paulo').date;
   const ok = !!o.startDate && /^\d{4}-\d{2}-\d{2}$/.test(o.startDate);
@@ -413,7 +413,10 @@ export function planoDe(o: { startDate?: string; escolha?: string | null; livre:
   const plano = o.livre ? 'livre' : pago || reservaVale ? 'plus' : !t.acabou ? 'teste' : 'gratis';
   return {
     plano, fundador, preco: fundador ? PRECO.fundador : PRECO.plus, escolha, testeDia: t.dia, fimTeste,
-    precisaEscolher: !o.livre && ok && !escolha && !pago && (fundador || t.acabou),
+    // Cobrança desligada: quem ainda não escolheu. Ligada (decisão do Tiago, 10/11): a tela de planos é a primeira coisa
+    // que aparece para quem já testava ou já acabou os 7 dias, até a pessoa PAGAR o Plus ou escolher o Grátis
+    // (escolha de Grátis feita antes de a cobrança ligar não conta: ela vê a tela mais uma vez).
+    precisaEscolher: !o.livre && ok && !pago && (fundador || t.acabou) && (ligada ? !(escolha === 'gratis' && String(o.escolhidoEm || '').slice(0, 10) >= desde!) : !escolha),
     pago, assinatura: a?.status ?? null, proximo: a?.status === 'authorized' ? a?.proximo ?? null : null, ate,
     forma: a?.status === 'authorized' ? 'cartao' : pix ? 'pix' : cartao ? 'cartao' : null,
     cobranca: ligada || !!o.dono, pagarAte,
