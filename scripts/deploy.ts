@@ -64,12 +64,14 @@ if (process.env.GOOGLE_CLIENT_SECRET) secrets.push({ name: 'FAIZ_GOOGLE_SECRET',
 const mpTok = (process.env.MP_ACCESS_TOKEN || '').trim();
 if (mpTok) {
   try {
-    const r = await fetch('https://api.mercadopago.com/users/me', { headers: { Authorization: `Bearer ${mpTok}` } });
+    // /users/me pode vir 403 (política da aplicação); o que importa é a chave abrir as assinaturas.
+    const H = { Authorization: `Bearer ${mpTok}` };
+    const r = await fetch('https://api.mercadopago.com/preapproval/search?limit=1', { headers: H });
     const j: any = await r.json().catch(() => ({}));
-    if (!r.ok) console.log(`::warning::MERCADO PAGO: a chave não foi aceita (${r.status} ${String(j.message || j.error || '').slice(0, 80)}). Confira o segredo MP_ACCESS_TOKEN (Access Token de produção, começa com APP_USR-).`);
+    const pm = await fetch('https://api.mercadopago.com/v1/payment_methods', { headers: H });
+    if (!r.ok) console.log(`::warning::MERCADO PAGO: assinaturas recusaram a chave (${r.status} ${String(j.message || j.error || '').slice(0, 80)}); meios de pagamento: ${pm.status}. Confira o segredo MP_ACCESS_TOKEN (Access Token de produção, começa com APP_USR-).`);
     else {
-      const teste = Array.isArray(j.tags) && j.tags.includes('test_user');
-      step(`MERCADO PAGO: chave aceita · país ${j.site_id || '?'} · ${teste ? 'conta de TESTE' : 'conta real'} · ${mpTok.startsWith('APP_USR-') ? 'formato de produção' : 'formato antigo'}`);
+      step(`MERCADO PAGO: chave aceita nas assinaturas (${j.paging?.total ?? 0} até agora) · meios de pagamento ${pm.status} · ${mpTok.startsWith('APP_USR-') ? 'formato de produção' : 'formato de teste'}`);
       secrets.push({ name: 'FAIZ_MP_TOKEN', value: mpTok });
     }
   } catch (e) { console.log(`::warning::MERCADO PAGO: não consegui falar com a API (${(e as Error).message}).`); }
