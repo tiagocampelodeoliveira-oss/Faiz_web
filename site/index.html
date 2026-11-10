@@ -503,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 11:32';
+const APP_VERSION = '2026-11-10 11:50';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -2312,8 +2312,8 @@ const brl2 = (c) => 'R$ ' + (c / 100).toFixed(2).replace('.', ',');
 const ehGratis = () => U.plano?.plano === 'gratis';
 function planoNome() {
   const p = U.plano; if (!p) return '';
-  if (p.plano === 'livre') return 'Liberado pelo time do Faiz';
   if (p.plano === 'plus' && p.pago) return p.assinatura === 'authorized' ? `Plus · ${brl2(p.preco)}/mês` : p.forma === 'pix' ? `Plus até ${L.ddmm(p.ate)} (Pix)` : `Plus até ${L.ddmm(p.ate)} (cancelado)`;
+  if (p.plano === 'livre') return 'Liberado pelo time do Faiz';
   if (p.plano === 'plus') return p.cobranca ? `Plus · falta confirmar o pagamento` : `Plus · ${brl2(p.preco)}/mês reservado`;
   if (p.plano === 'teste') return `Teste do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}`;
   return 'Grátis';
@@ -2322,12 +2322,12 @@ async function planoAtualiza() {
   try { const r = await Cloud.fn('plano'); if (r?.plano) { U.plano = r.plano; render(true); } } catch (e) {}
 }
 function planosScreen(obrig) {
-  if (document.getElementById('planos') || !U.plano || U.plano.plano === 'livre') return;
+  if (document.getElementById('planos') || !U.plano || (U.plano.plano === 'livre' && !U.plano.cobranca)) return;
   const p = U.plano, fund = p.fundador;
   const el = document.createElement('div');
   el.className = 'planos'; el.id = 'planos'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Planos do Faiz');
   const check = (t) => `<li><i>✓</i><span>${t}</span></li>`;
-  const intro = fund
+  const intro = p.plano === 'livre' ? `Você está liberada pelo time do Faiz 💜 e foi escolhida para testar o pagamento do Plus (<b>${brl2(p.preco)}</b>). Sua conta continua liberada de qualquer jeito.` : fund
     ? `Você testou o Faiz desde o começo 💜 Agora você escolhe: o Plus sai por <b>${brl2(p.preco)} por mês</b>. Se preferir o Grátis, sua rotina continua, mas sem a minha inteligência.`
     : p.plano === 'teste' ? `Você está nos 7 dias grátis do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}. Depois, escolhe como continuar.` : 'Seus 7 dias de Plus acabaram. Escolha como continuar:';
   el.innerHTML = `<div class="ptop"><span class="row" style="gap:8px">${LOGO}<b style="font-family:var(--f-display);font-size:22px;color:var(--navy)">faiz</b></span>${obrig ? '' : '<button class="round" type="button" data-pl="fechar" aria-label="Fechar">' + I.x + '</button>'}</div>
@@ -2360,6 +2360,7 @@ function planosScreen(obrig) {
     if (b.dataset.pl === 'fechar') return fecha();
     const escolha = b.dataset.pl;
     if (escolha === 'pix') { fecha(); return pixPlus(); }
+    if (escolha === 'gratis' && U.plano.plano === 'livre') return fecha();
     if (escolha === 'plus' && U.plano.assinatura === 'authorized') return fecha();
     if (escolha === 'plus' && U.plano.cobranca) { fecha(); return assinarPlus(); }
     if (escolha === 'plus' && U.plano.pago) return fecha();
@@ -2987,7 +2988,7 @@ const screens = {
       <div class="head"><button class="round" type="button" data-act="tab" data-v="hoje" aria-label="Voltar">${I.left}</button><h1 class="screen-title">Mais</h1><span></span></div>
       <div class="label">Avisos no celular</div>
       ${avisosCard()}
-      ${U.plano && U.plano.plano !== 'livre' ? `<div class="label">Seu plano</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris no modo simples (sem IA), Contas, avisos, agenda e rotinas.' : U.plano.pago && U.plano.proximo ? `Próxima cobrança em ${L.ddmm(U.plano.proximo)}, pelo Mercado Pago.` : U.plano.pago && U.plano.forma === 'pix' ? `Pago por Pix. Não renova sozinho: toque para renovar quando quiser.` : U.plano.cobranca && !U.plano.pago && U.plano.pagarAte ? `Confirme o pagamento até ${L.ddmm(U.plano.pagarAte)} para continuar no Plus.` : 'Íris com IA, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() || (U.plano.cobranca && !U.plano.pago) ? 'navy' : ''}">${U.plano.cobranca && !U.plano.pago ? 'Assinar' : U.plano.forma === 'pix' && U.plano.cobranca ? 'Renovar' : ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button>${U.plano.assinatura === 'authorized' ? '<button class="setrow" type="button" data-act="cancelar-plus"><div class="txt"><div class="t">Cancelar assinatura</div><div class="meta">Sem multa. O mês já pago continua valendo.</div></div><span class="pill">Cancelar</span></button>' : ''}</div>` : ''}
+      ${U.plano && (U.plano.plano !== 'livre' || U.plano.cobranca) ? `<div class="label">Seu plano</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris no modo simples (sem IA), Contas, avisos, agenda e rotinas.' : U.plano.pago && U.plano.proximo ? `Próxima cobrança em ${L.ddmm(U.plano.proximo)}, pelo Mercado Pago.` : U.plano.pago && U.plano.forma === 'pix' ? `Pago por Pix. Não renova sozinho: toque para renovar quando quiser.` : U.plano.plano === 'livre' && !U.plano.pago ? 'Você foi escolhida para testar o pagamento do Plus. Toque para pagar.' : U.plano.cobranca && !U.plano.pago && U.plano.pagarAte ? `Confirme o pagamento até ${L.ddmm(U.plano.pagarAte)} para continuar no Plus.` : 'Íris com IA, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() || (U.plano.cobranca && !U.plano.pago) ? 'navy' : ''}">${U.plano.cobranca && !U.plano.pago ? 'Assinar' : U.plano.forma === 'pix' && U.plano.cobranca ? 'Renovar' : ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button>${U.plano.assinatura === 'authorized' ? '<button class="setrow" type="button" data-act="cancelar-plus"><div class="txt"><div class="t">Cancelar assinatura</div><div class="meta">Sem multa. O mês já pago continua valendo.</div></div><span class="pill">Cancelar</span></button>' : ''}</div>` : ''}
       <div class="label">Teste do Faiz</div>
       <div class="card">
         <button class="setrow" type="button" data-act="entrevista-de-novo"><div class="txt"><div class="t">Montar minha rotina com a Íris</div><div class="meta">${S.entrevista?.fim ? 'Feito. Toque para revisar trabalho, estudos e exercícios.' : 'Ela pergunta o que é fixo na sua semana e monta tudo.'}</div></div><span class="pill">${S.entrevista?.fim ? 'Revisar' : 'Começar'}</span></button>

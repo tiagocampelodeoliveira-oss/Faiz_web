@@ -205,3 +205,15 @@ create table if not exists public.pix_pagamentos (
 );
 create index if not exists pix_pagamentos_user on public.pix_pagamentos (user_id, criado_em desc);
 alter table public.pix_pagamentos enable row level security;
+
+-- Quem pode testar o pagamento do Plus antes de a cobrança ser ligada para todos (escolha do Tiago). Só o servidor.
+create table if not exists public.pagar_teste (
+  user_id uuid primary key references auth.users on delete cascade,
+  nome text,
+  criado_em timestamptz not null default now()
+);
+alter table public.pagar_teste enable row level security;
+-- 10/11: Amanda (todas as contas com esse primeiro nome) faz o primeiro pagamento de teste.
+insert into public.pagar_teste (user_id, nome)
+  select user_id, data->>'name' from public.states where lower(split_part(trim(data->>'name'), ' ', 1)) = 'amanda'
+  on conflict (user_id) do nothing;

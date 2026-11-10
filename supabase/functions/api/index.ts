@@ -25,7 +25,8 @@ async function planoUser(userId: string): Promise<PlanoInfo> {
     rest(`states?user_id=eq.${userId}&select=start:data->>startDate,tz:data->settings->>tz`).then((r: any) => r?.[0]),
     rest(`planos?user_id=eq.${userId}&select=escolha`).then((r: any) => r?.[0]?.escolha ?? null).catch(() => null),
     rest(`assinaturas?user_id=eq.${userId}&select=status,ate,proximo,pix_ate`).then((r: any) => r?.[0] ?? null).catch(() => null),
-    rest(`owners?user_id=eq.${userId}&select=user_id`).then((r: any) => !!r?.length).catch(() => false),
+    // dono do teste, ou pessoa escolhida pelo Tiago para testar o pagamento antes de ligar a cobrança para todos
+    Promise.all([rest(`owners?user_id=eq.${userId}&select=user_id`).catch(() => []), rest(`pagar_teste?user_id=eq.${userId}&select=user_id`).catch(() => [])]).then(([o, t]: any) => !!(o?.length || t?.length)),
   ]);
   return planoDe({ startDate: row?.start, escolha: esc, livre, now: new Date(), tz: row?.tz || 'America/Sao_Paulo', assinatura: ass, dono });
 }

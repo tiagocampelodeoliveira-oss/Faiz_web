@@ -53,6 +53,7 @@ const db = {
   planos: [] as any[],
   assinaturas: [] as any[],
   pix_pagamentos: [] as any[],
+  pagar_teste: [] as any[],
 };
 let mpPay: any = null;
 const mpCalls: { method: string; path: string; body: any }[] = [];
@@ -590,4 +591,20 @@ test('api: Pix de 1 mês — cria o código, confere no Mercado Pago, libera 30 
     db.pix_pagamentos = [];
     assert.equal((await post(api, { action: 'pixstatus', id: '111' }, auth)).status, 404);
   } finally { delete env.FAIZ_MP_TOKEN; Object.assign(db, antes); mpPay = null; }
+});
+
+test('api: pessoa escolhida para testar o pagamento vê o botão de pagar mesmo liberada e com a cobrança desligada', async () => {
+  const auth = { Authorization: 'Bearer user-token', apikey: 'anon' };
+  const antes = { states: db.states, unlimited: db.unlimited, planos: db.planos, owners: db.owners, assinaturas: db.assinaturas, pagar_teste: db.pagar_teste };
+  db.planos = []; db.owners = []; db.assinaturas = []; db.pagar_teste = [];
+  db.unlimited = [{ user_id: U }];
+  db.states = [{ start: '2026-10-29', tz: 'America/Sao_Paulo' }] as any;
+  setNow('2026-11-11T15:00:00Z');
+  try {
+    let me = await (await post(api, { action: 'me' }, auth)).json();
+    assert.equal(me.plano.plano, 'livre'); assert.equal(me.plano.cobranca, false);
+    db.pagar_teste = [{ user_id: U }];
+    me = await (await post(api, { action: 'me' }, auth)).json();
+    assert.equal(me.plano.plano, 'livre', 'continua liberada (não perde a IA)'); assert.equal(me.plano.cobranca, true); assert.equal(me.plano.pago, false);
+  } finally { Object.assign(db, antes); }
 });

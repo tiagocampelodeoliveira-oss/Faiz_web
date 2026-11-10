@@ -44,6 +44,10 @@ try {
 // 3. Banco.
 await sql(readFileSync('supabase/schema.sql', 'utf8'));
 step('banco aplicado');
+try {
+  const pt = await sql("select count(*)::int as contas, (select count(*)::int from auth.identities i where i.provider = 'google' and i.user_id in (select user_id from public.pagar_teste)) as com_google from public.pagar_teste");
+  step('TESTE DE PAGAMENTO liberado para: ' + JSON.stringify(pt).slice(0, 200));
+} catch (e) { console.log(`::warning::não consegui contar pagar_teste: ${(e as Error).message.slice(0, 150)}`); }
 
 // 4. Segredos das funções. As chaves VAPID nascem uma vez e nunca mudam (senão os celulares param de receber).
 const existing = new Set(((await api('/secrets')) as { name: string }[]).map((s) => s.name));
