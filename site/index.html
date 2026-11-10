@@ -227,6 +227,13 @@ button{cursor:pointer}
 .setrow+.setrow{border-top:1px solid var(--line)}
 .setrow .txt{flex:1;min-width:0}
 .setrow .t{font-weight:500}
+.mrow .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--blue-soft);color:var(--blue-ink);flex:none}
+.mrow .ic svg{width:21px;height:21px}
+.mrow .chev{color:var(--ink-muted);flex:none;display:grid}
+.mrow .chev svg{width:18px;height:18px}
+.mrow .dot{width:9px;height:9px;border-radius:50%;background:var(--red-ink);flex:none}
+.mperfil{display:flex;align-items:center;gap:14px;padding:16px}
+.mperfil .avatar{box-shadow:none;border:0;flex:none}
 .toggle{width:46px;height:28px;border-radius:14px;border:0;background:var(--toggle-off);position:relative;flex:none;padding:0;transition:background .2s}
 .toggle::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 2px 4px rgba(0,0,0,.15)}
 .toggle[aria-checked=true]{background:var(--teal)}
@@ -503,7 +510,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 12:40';
+const APP_VERSION = '2026-11-10 14:33';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -536,6 +543,11 @@ const I = {
   pin: sv('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>'),
   wallet: sv('<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3.5" y="8" width="17" height="12" rx="2.5"/><path d="M16 14h1.5"/>'),
   edit: sv('<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m14 6 4 4"/>'),
+  user: sv('<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
+  help: sv('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6M12 17h.01"/>'),
+  lock: sv('<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>'),
+  star: sv('<path d="m12 3.5 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>'),
+  bot: sv('<rect x="4.5" y="7.5" width="15" height="11" rx="4"/><path d="M12 4v3.5M9.5 12.5h.01M14.5 12.5h.01M9.5 15.5h5"/>'),
   bell: sv('<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>'),
 };
 
@@ -2147,7 +2159,7 @@ function openLink(href) {
   else if (t) { U.tab = 'hoje'; render(); taskSheet(t); }
   else if (v === 'noite') { U.tab = 'hoje'; render(); nightSheet(); }
   else if (v === 'planejar') { U.tab = 'faz'; U.scrollChat = true; render(); }
-  else if (v === 'assinatura') { U.tab = 'mais'; render(); assinaturaVoltou(); }
+  else if (v === 'assinatura') { U.tab = 'mais'; U.maisSec = 'plano'; render(); assinaturaVoltou(); }
   else if (v === 'planos') { U.tab = 'hoje'; render(); planoAtualiza().finally(() => planosScreen(false)); }
   else if (v === 'novidade') { U.tab = 'hoje'; render(); novidadeSheet(); }
   else if (v === 'contas') { U.tab = 'contas'; U.mes = null; U.finTab = 'geral'; render(); window.scrollTo(0, 0); }
@@ -2832,6 +2844,31 @@ function avisosCard() {
   ${st === 'on' ? `<button class="btn white" type="button" data-act="testpush" style="margin-top:12px" ${U.testing ? 'disabled' : ''}>${U.testing ? 'Enviando...' : 'Testar aviso agora'}</button>` : ''}`;
 }
 
+/* ---------- Mais: temas principais; tocar abre as funções de cada um (pedido do Tiago, 10/11) ---------- */
+const temPlano = () => !!(U.plano && (U.plano.plano !== 'livre' || U.plano.cobranca));
+function perfilLinha() {
+  const p = temPlano() ? planoNome() : U.plano?.plano === 'livre' ? 'Liberado pelo time do Faiz' : '';
+  return [p, S.account?.google ? 'conta salva no Google' : ''].filter(Boolean).join(' · ') || 'Faiz';
+}
+const MAIS_SECOES = {
+  plano: { t: 'Seu plano', ic: 'star', vis: temPlano, resumo: () => ({
+    txt: esc(planoNome()), alerta: !!(U.plano?.cobranca && !U.plano.pago && (U.plano.precisaEscolher || U.plano.pagarAte)) }) },
+  avisos: { t: 'Avisos', ic: 'bell', vis: () => true, resumo: () => {
+    const st = U.pushState, n = S.settings.notify;
+    if (st === 'on') return { txt: `Ligados · ${n.lead} min antes de cada atividade` };
+    if (st === 'checking') return { txt: 'Verificando...' };
+    return { txt: st === 'denied' ? 'Bloqueados pelo celular. Toque para ver como liberar' : st === 'install' ? 'Coloque o Faiz na tela de início para receber' : st === 'unsupported' ? 'Este navegador não recebe avisos' : 'Desligados. Toque para ligar', alerta: true };
+  } },
+  iris: { t: 'Íris', ic: 'bot', vis: () => true, resumo: () => ({ txt: `Sua rotina${S.entrevista?.fim ? ' (montada)' : ''}, voz e jeito de responder` }) },
+  conta: { t: 'Conta e Google', ic: 'user', vis: () => true, resumo: () => {
+    const n = Object.values(S.integ || {}).filter(Boolean).length;
+    if (!S.account?.google) return { txt: 'Salve sua conta para não perder nada', alerta: S.stats.days.length >= 2 };
+    return { txt: `Salva com o Google${n ? ` · ${plural(n, 'integração ligada', 'integrações ligadas')}` : ''}` };
+  } },
+  ajuda: { t: 'Ajuda e opinião', ic: 'help', vis: () => true, resumo: () => ({ txt: 'Tutorial, algo deu errado e sua opinião' }) },
+  dados: { t: 'Seus dados e privacidade', ic: 'lock', vis: () => true, resumo: () => ({ txt: 'Apagar conversa ou dados, política de privacidade' }) },
+};
+
 const screens = {
   install() {
     return `<main class="screen bg-welcome" style="padding-bottom:40px"><div class="welcome" style="padding-top:12px;gap:0">
@@ -3016,42 +3053,59 @@ const screens = {
   },
   mais() {
     const st = S.stats;
-    return `<main class="screen bg-lav">
-      <div class="head"><button class="round" type="button" data-act="tab" data-v="hoje" aria-label="Voltar">${I.left}</button><h1 class="screen-title">Mais</h1><span></span></div>
-      <div class="label">Avisos no celular</div>
-      ${avisosCard()}
-      ${U.plano && (U.plano.plano !== 'livre' || U.plano.cobranca) ? `<div class="label">Seu plano</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris no modo simples (sem IA), Contas, avisos, agenda e rotinas.' : U.plano.pago && U.plano.proximo ? `Próxima cobrança em ${L.ddmm(U.plano.proximo)}, pelo Mercado Pago.` : U.plano.pago && U.plano.forma === 'pix' ? `Pago por Pix. Não renova sozinho: toque para renovar quando quiser.` : U.plano.plano === 'livre' && !U.plano.pago ? 'Você foi escolhida para testar o pagamento do Plus. Toque para pagar.' : U.plano.cobranca && !U.plano.pago && U.plano.pagarAte ? `Confirme o pagamento até ${L.ddmm(U.plano.pagarAte)} para continuar no Plus.` : 'Íris com IA, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() || (U.plano.cobranca && !U.plano.pago) ? 'navy' : ''}">${U.plano.cobranca && !U.plano.pago ? 'Assinar' : U.plano.forma === 'pix' && U.plano.cobranca ? 'Renovar' : ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button>${U.plano.assinatura === 'authorized' ? '<button class="setrow" type="button" data-act="cancelar-plus"><div class="txt"><div class="t">Cancelar assinatura</div><div class="meta">Sem multa. O mês já pago continua valendo.</div></div><span class="pill">Cancelar</span></button>' : ''}</div>` : ''}
-      <div class="label">Teste do Faiz</div>
+    const sec = U.maisSec && MAIS_SECOES[U.maisSec]?.vis() ? U.maisSec : null;
+    const head = (t, back) => `<div class="head"><button class="round" type="button" ${back ? 'data-act="mais-sec" data-v=""' : 'data-act="tab" data-v="hoje"'} aria-label="Voltar">${I.left}</button><h1 class="screen-title">${t}</h1><span></span></div>`;
+    if (!sec) {
+      const linha = (k) => { const m = MAIS_SECOES[k]; if (!m.vis()) return ''; const r = m.resumo(); return `<button class="setrow mrow" type="button" data-act="mais-sec" data-v="${k}"><span class="ic">${I[m.ic]}</span><div class="txt"><div class="t">${m.t}</div><div class="meta">${r.txt}</div></div>${r.alerta ? '<span class="dot" aria-label="Precisa de atenção"></span>' : ''}<span class="chev">${I.right}</span></button>`; };
+      return `<main class="screen bg-lav">${head('Mais')}
+      <div class="card mperfil"><span class="avatar">${esc((S.name || '?').trim().charAt(0).toUpperCase() || '?')}</span><div class="txt" style="flex:1;min-width:0"><div style="font-weight:700;font-size:18px">${esc(S.name || 'Você')}</div><div class="meta">${esc(perfilLinha())}</div></div></div>
+      <div class="card" style="margin-top:14px">${['plano', 'avisos', 'iris', 'conta'].map(linha).join('')}</div>
+      <div class="card" style="margin-top:14px">${['ajuda', 'dados'].map(linha).join('')}</div>
+      <p class="meta" style="text-align:center;margin-top:22px"><a href="privacidade.html" style="color:inherit">Política de privacidade</a> · Faiz · versão de teste${U.cloudErr ? ' · sem conexão com a nuvem agora' : ''}</p>
+    </main>`;
+    }
+    let corpo = '';
+    if (sec === 'plano') corpo = `<div style="margin-top:6px">${U.plano && (U.plano.plano !== 'livre' || U.plano.cobranca) ? `<div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris no modo simples (sem IA), Contas, avisos, agenda e rotinas.' : U.plano.pago && U.plano.proximo ? `Próxima cobrança em ${L.ddmm(U.plano.proximo)}, pelo Mercado Pago.` : U.plano.pago && U.plano.forma === 'pix' ? `Pago por Pix. Não renova sozinho: toque para renovar quando quiser.` : U.plano.plano === 'livre' && !U.plano.pago ? 'Você foi escolhida para testar o pagamento do Plus. Toque para pagar.' : U.plano.cobranca && !U.plano.pago && U.plano.pagarAte ? `Confirme o pagamento até ${L.ddmm(U.plano.pagarAte)} para continuar no Plus.` : 'Íris com IA, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() || (U.plano.cobranca && !U.plano.pago) ? 'navy' : ''}">${U.plano.cobranca && !U.plano.pago ? 'Assinar' : U.plano.forma === 'pix' && U.plano.cobranca ? 'Renovar' : ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button>${U.plano.assinatura === 'authorized' ? '<button class="setrow" type="button" data-act="cancelar-plus"><div class="txt"><div class="t">Cancelar assinatura</div><div class="meta">Sem multa. O mês já pago continua valendo.</div></div><span class="pill">Cancelar</span></button>' : ''}</div>` : ''}</div>`;
+    else if (sec === 'avisos') corpo = `<div style="margin-top:6px">${avisosCard()}</div>`;
+    else if (sec === 'iris') corpo = `<div class="label">Sua rotina</div>
       <div class="card">
         <button class="setrow" type="button" data-act="entrevista-de-novo"><div class="txt"><div class="t">Montar minha rotina com a Íris</div><div class="meta">${S.entrevista?.fim ? 'Feito. Toque para revisar trabalho, estudos e exercícios.' : 'Ela pergunta o que é fixo na sua semana e monta tudo.'}</div></div><span class="pill">${S.entrevista?.fim ? 'Revisar' : 'Começar'}</span></button>
-        <button class="setrow" type="button" data-act="tour"><div class="txt"><div class="t">Ver o tutorial de novo</div><div class="meta">A Íris mostra o que cada parte do app faz.</div></div><span class="pill">Ver</span></button>
-        <button class="setrow" type="button" data-act="problema"><div class="txt"><div class="t">Algo deu errado?</div><div class="meta">Me conta e eu aviso o Tiago na hora.</div></div><span class="pill">Contar</span></button>
-        <button class="setrow" type="button" data-act="feedback"><div class="txt"><div class="t">Dar minha opinião</div><div class="meta">Leva 1 minuto e ajuda muito.</div></div><span class="pill navy">Abrir</span></button>
-        ${U.owner
-          ? `<div class="setrow"><div class="txt"><div class="t">Alertas do teste</div><div class="meta">Ligados neste celular. Você recebe um aviso se o crédito da IA acabar.</div></div></div>${!U.aiCredit ? '<div style="padding:0 16px 14px"><div class="warn"><b>Crédito da IA acabou.</b> A Íris está no modo simples. Recarregue em console.anthropic.com › Billing.</div></div>' : ''}`
-          : `<button class="setrow" type="button" data-act="owner"><div class="txt"><div class="t">Receber alertas do teste</div><div class="meta">Só para quem organiza o teste.</div></div><span class="pill">Ativar</span></button>`}
-        <div class="setrow"><div class="txt"><div class="t">Seu uso até agora</div><div class="meta num">${plural(st.days.length, 'dia', 'dias')} · ${plural(st.requests, 'pedido', 'pedidos')} ao Faiz · ${plural(st.confirmed, 'plano confirmado', 'planos confirmados')} · ${plural(S.routines.length, 'rotina', 'rotinas')} · ${plural(S.fin.mov.length + S.fin.fixas.length, 'anotação', 'anotações')} nas contas</div></div></div>
       </div>
-      <div class="label">Preferências</div>
+      <div class="label">Jeito da Íris</div>
       <div class="card">
-        <div class="setrow"><div class="txt"><label class="t" for="nameEdit">Seu nome</label><input id="nameEdit" class="field" style="margin-top:6px;padding:9px 12px" maxlength="40" value="${esc(S.name)}"></div></div>
         <div class="setrow"><div class="txt"><div class="t">Ler as respostas em voz alta</div><div class="meta">${S.settings.speak ? 'Ligado: a Íris fala todas as respostas.' : 'Desligado: a Íris só fala quando você usa o microfone.'}</div></div><button class="toggle" type="button" role="switch" aria-checked="${!!S.settings.speak}" aria-label="Ler as respostas em voz alta" data-act="speak"></button></div>
         <div class="setrow"><div class="txt"><div class="t">Perguntar antes de tudo</div><div class="meta">${S.settings.askBefore ? 'Você confirma cada plano antes de entrar na agenda.' : 'A Íris cria e muda na hora e mostra Editar e Desfazer. Mudança grande na rotina ela sempre pergunta antes.'}</div></div><button class="toggle" type="button" role="switch" aria-checked="${S.settings.askBefore}" aria-label="Perguntar antes de tudo" data-act="askbefore"></button></div>
         <div class="setrow"><div class="txt"><div class="t">Inteligência da Íris</div><div class="meta">${U.trialOver ? 'Pausada: o seu teste de 7 dias terminou. A Íris responde no modo simples; avisos, contas e rotinas continuam.' : !U.aiCredit ? 'Sem crédito agora. A Íris responde no modo simples, com frases mais diretas.' : U.aiState === 'ready' && U.aiOn ? 'Ligada.' : U.aiState === 'loading' ? 'Verificando...' : 'Indisponível agora. A Íris entende frases mais diretas.'}</div></div></div>
-      </div>
-      ${calendarioCard()}
-      ${integracoesCard()}
+      </div>`;
+    else if (sec === 'conta') corpo = `<div class="label">Seu nome</div>
+      <div class="card"><div class="setrow"><div class="txt"><label class="t" for="nameEdit">Como a Íris te chama</label><input id="nameEdit" class="field" style="margin-top:6px;padding:9px 12px" maxlength="40" value="${esc(S.name)}"></div></div></div>
       <div class="label">Sua conta</div>
       <div class="card">${S.account?.google
         ? `<div class="setrow"><div class="txt"><div class="t">Salva com o Google</div><div class="meta">${esc(S.account.email || '')}. Se trocar de celular, é só tocar em "Entrar com Google" lá.</div></div><span class="pill ok">✓</span></div>`
         : `<button class="setrow" type="button" data-act="google-link"><div class="txt"><div class="t">Salvar minha conta com o Google</div><div class="meta">Para não perder suas tarefas, rotinas e contas se trocar de celular.</div></div><span class="pill navy">Salvar</span></button>
            <button class="setrow" type="button" data-act="google-login"><div class="txt"><div class="t">Já salvei antes: entrar com Google</div><div class="meta">Traz para este celular o que você tinha no outro.</div></div><span class="pill">Entrar</span></button>`}</div>
-      <div class="label">Seus dados</div>
+      ${integracoesCard()}
+      ${calendarioCard()}`;
+    else if (sec === 'ajuda') corpo = `<div class="label">Ajuda</div>
       <div class="card">
+        <button class="setrow" type="button" data-act="tour"><div class="txt"><div class="t">Ver o tutorial de novo</div><div class="meta">A Íris mostra o que cada parte do app faz.</div></div><span class="pill">Ver</span></button>
+        <button class="setrow" type="button" data-act="problema"><div class="txt"><div class="t">Algo deu errado?</div><div class="meta">Me conta e eu aviso o Tiago na hora.</div></div><span class="pill">Contar</span></button>
+      </div>
+      <div class="label">Teste do Faiz</div>
+      <div class="card">
+        <button class="setrow" type="button" data-act="feedback"><div class="txt"><div class="t">Dar minha opinião</div><div class="meta">Leva 1 minuto e ajuda muito.</div></div><span class="pill navy">Abrir</span></button>
+        ${U.owner
+          ? `<div class="setrow"><div class="txt"><div class="t">Alertas do teste</div><div class="meta">Ligados neste celular. Você recebe um aviso se o crédito da IA acabar.</div></div></div>${!U.aiCredit ? '<div style="padding:0 16px 14px"><div class="warn"><b>Crédito da IA acabou.</b> A Íris está no modo simples. Recarregue em console.anthropic.com › Billing.</div></div>' : ''}`
+          : `<button class="setrow" type="button" data-act="owner"><div class="txt"><div class="t">Receber alertas do teste</div><div class="meta">Só para quem organiza o teste.</div></div><span class="pill">Ativar</span></button>`}
+        <div class="setrow"><div class="txt"><div class="t">Seu uso até agora</div><div class="meta num">${plural(st.days.length, 'dia', 'dias')} · ${plural(st.requests, 'pedido', 'pedidos')} ao Faiz · ${plural(st.confirmed, 'plano confirmado', 'planos confirmados')} · ${plural(S.routines.length, 'rotina', 'rotinas')} · ${plural(S.fin.mov.length + S.fin.fixas.length, 'anotação', 'anotações')} nas contas</div></div></div>
+      </div>`;
+    else if (sec === 'dados') corpo = `<div class="card" style="margin-top:6px">
         <button class="setrow" type="button" data-act="clearchat"><div class="txt"><div class="t">Apagar conversa com a Íris</div></div></button>
         <button class="setrow" type="button" data-act="reset"><div class="txt"><div class="t" style="color:var(--red-ink);font-weight:600">Apagar todos os meus dados</div><div class="meta">Tarefas, conversa e avisos deste celular.</div></div></button>
       </div>
-      <p class="meta" style="text-align:center;margin-top:22px"><a href="privacidade.html" style="color:inherit">Política de privacidade</a> · Faiz · versão de teste${U.cloudErr ? ' · sem conexão com a nuvem agora' : ''}</p>
+      <p class="meta" style="margin:16px 4px 0">Suas tarefas, rotinas e contas ficam neste celular e na sua conta do Faiz, para os avisos chegarem. Ninguém do time lê suas conversas ou valores. <a href="privacidade.html" style="color:inherit">Ler a política de privacidade</a></p>`;
+    return `<main class="screen bg-lav">${head(MAIS_SECOES[sec].t, true)}
+      ${corpo}
     </main>`;
   },
 };
@@ -3091,8 +3145,8 @@ function render(keep) {
     if (keep && tlY != null) w.scrollTop = tlY;
     else { const sel = U.agenda, ev = S.tasks.filter((t) => t.date === sel && t.start != null).sort((a, b) => a.start - b.start)[0]; const target = sel === today() ? L.minutesOf(new Date()) - 90 : (ev?.start ?? 540) - 30; w.scrollTop = Math.max(0, (target / 60 - 6) * 64); }
   }
-  if (U.tab === 'mais') {
-    const ne = document.getElementById('nameEdit');
+  const ne = U.tab === 'mais' && document.getElementById('nameEdit');
+  if (ne) {
     ne.addEventListener('change', () => { S.name = ne.value.trim(); save(); toast('Nome salvo'); });
   }
 }
@@ -3322,7 +3376,7 @@ document.addEventListener('click', (e) => {
     case 'done': { const t = S.tasks.find((x) => x.id === id); closeSheet(); if (t && t.status !== 'feito') toggleTask(id); break; }
     case 'snooze': snooze(id, +v || 15); break;
     case 'resched': reschedule(id); break;
-    case 'tab': if (v === 'contas' && U.tab !== 'contas') { U.finChatAt = null; U.finTab = 'geral'; } U.tab = v; if (v === 'faz') U.scrollChat = true; if (v === 'contas') gmailScan(); render(); if (v !== 'faz') window.scrollTo(0, 0); break;
+    case 'tab': if (v === 'mais' && U.tab !== 'mais') U.maisSec = null; if (v === 'contas' && U.tab !== 'contas') { U.finChatAt = null; U.finTab = 'geral'; } U.tab = v; if (v === 'faz') U.scrollChat = true; if (v === 'contas') gmailScan(); render(); if (v !== 'faz') window.scrollTo(0, 0); break;
     case 'filter': U.filter = v; render(true); break;
     case 'verAba': U.tab = 'hoje'; U.filter = v; render(); window.scrollTo(0, 0); break;
     case 'tfilter': U.tfilter = v; render(true); break;
@@ -3382,6 +3436,7 @@ document.addEventListener('click', (e) => {
     case 'feedback': feedbackSheet(); break;
     case 'avaliar': avaliarSheet(); break;
     case 'planos': planosScreen(false); break;
+    case 'mais-sec': U.maisSec = v || null; S.stats.maisSec = { ...(S.stats.maisSec || {}), [v || 'inicio']: ((S.stats.maisSec || {})[v || 'inicio'] || 0) + 1 }; render(); window.scrollTo(0, 0); break;
     case 'cancelar-plus': cancelarPlus(); break;
     case 'owner': ownerSheet(); break;
     case 'problema': problemSheet(); break;
