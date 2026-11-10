@@ -21,7 +21,7 @@ jobs:
           node-version: 22
       - name: Testes do servidor
         run: npx -y tsx --test tests/backend.test.ts tests/functions.test.ts
-      - name: Frases reais com a Íris (não publica nada)
+      - name: Íris completa x Íris rápida (não publica nada)
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: npx -y tsx scripts/preview.ts
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npx -y tsx scripts/comparar.ts
