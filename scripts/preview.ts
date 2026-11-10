@@ -41,13 +41,16 @@ const P = (frase: string, ent?: Passo['ent']): Passo => ({ frase, ent });
 const acadTodo = { id: 'rta', title: 'Academia', dias: [0, 1, 2, 3, 4, 5, 6], start: 1140, end: 1200, category: 'saude', color: 'green', since: L.addDays(hoje, -3), createdAt: 0 };
 const qui = (() => { for (let i = 1; i <= 7; i++) { const d = L.addDays(hoje, i); if (L.parseKey(d).getDay() === 4) return d; } return hoje; })();
 const casamento = { id: 'cas1', title: 'Casamento', date: qui, start: 960, end: 1080, status: 'pendente', category: 'social', color: 'pink', createdAt: 0 };
-const redacao = { id: 'red1', title: 'Redação criativa: aula 1', dias: [4], start: 840, end: 930, category: 'pessoal', color: 'blue', since: L.addDays(hoje, -3), createdAt: 0 };
-const cursinho = { id: 'cur1', title: 'Cursinho', dias: [1, 3], start: 1140, end: 1320, category: 'pessoal', color: 'blue', since: L.addDays(hoje, -3), createdAt: 0 };
+const corrida = { id: 'cor1', title: 'Corrida', date: hoje, start: 1110, end: 1170, status: 'pendente', category: 'pessoal', color: 'green', createdAt: 0 };
 const conversas: { rot: any[]; extra?: any[]; passos: Passo[] }[] = [
-  { rot: [redacao, cursinho, acadTodo], passos: [P('Coloque tudo que for Redação, cursinho, escola e aula na aba trabalho')] },
-  { rot: [redacao, cursinho, acadTodo], passos: [P('o cursinho é coisa de estudo, separa ele do pessoal')] },
-  { rot: [redacao, cursinho, acadTodo], passos: [P('deixa a academia junto com as coisas do trabalho, é meu treino de personal')] },
-  { rot: [redacao, cursinho, acadTodo], passos: [P('marca aula de redação na sexta das 14 às 15h30')] },
+  { rot: [], extra: [corrida], passos: [P('reajusta a corrida pra 19h')] },
+  { rot: [], extra: [corrida], passos: [P('remarca a corrida pra amanhã às 7')] },
+  { rot: [], extra: [corrida], passos: [P('adia a corrida em 1 hora')] },
+  { rot: [], extra: [corrida], passos: [P('passa a corrida pra depois do almoço')] },
+  { rot: [], extra: [corrida], passos: [P('marca outra corrida às 21h')] },
+  { rot: [], extra: [corrida], passos: [P('troca o nome da corrida pra treino de corrida')] },
+  { rot: [acadTodo], extra: [casamento], passos: [P('ajusta o casamento pra começar 17h')] },
+  { rot: [], extra: [corrida], passos: [P('quero correr amanhã às 6 também')] },
 ];
 for (const conv of conversas) {
   const linhas: string[] = [];
@@ -57,7 +60,7 @@ for (const conv of conversas) {
   for (const { frase, ent } of conv.passos) {
     if (ent) recent.push({ who: 'bot', text: ent.pergunta });
     const ctx = { now: new Date(), tasks: ts, fin, routines, entrevista: ent, recentUser: recent.filter((m) => m.who === 'me').map((m) => m.text).join(' ') };
-    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, recent, { nome: 'Rita' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
+    const r = await fetch(`${URL_}/functions/v1/api`, { method: 'POST', headers: auth, body: JSON.stringify((() => { const p = L.buildPromptParts(frase, ctx, recent, { nome: 'Kauã' }); return { action: 'ai', system: p.system, prompt: p.user }; })()) });
     const body: any = await r.json().catch(() => ({}));
     let texto = '';
     try {
@@ -68,9 +71,9 @@ for (const conv of conversas) {
       for (const sp of rep.routines || []) { const nr = { id: L.newId('r'), ...sp, since: hoje, createdAt: 0 }; routines = [...routines, nr]; ts = L.materialize(ts, [nr], hoje).tasks; }
       for (const e of rep.routineEdits || []) { if (e.remove) { const x = L.removeRoutine(ts, routines, e.id, hoje); ts = x.tasks; routines = x.routines; } else { const x = L.updateRoutine(ts, routines, e.id, e, hoje); ts = x.tasks; routines = x.routines; } }
       if (rep.ops?.length) { for (const o of rep.ops) { if (o.type === 'remove') { const t = ts.find((x: any) => x.id === o.id); const r = t?.routine && routines.find((x: any) => x.id === t.routine); if (r) r.skip = [...(r.skip || []), t.date]; } } ts = L.applyOps(ts, rep.ops).tasks; ts = L.materialize(ts, routines, hoje).tasks; }
-      const depois = ts.filter((x: any) => x.date === qui).sort((a: any, b: any) => a.start - b.start).map((x: any) => `${x.title} ${L.timeRange(x.start, x.end)}`).join(', ');
+      const depois = ts.filter((x: any) => !x.routine && (x.date === qui || x.date === hoje || x.date === amanha)).sort((a: any, b: any) => a.start - b.start).map((x: any) => `${x.title} ${x.date.slice(5)} ${L.timeRange(x.start, x.end)}`).join(', ');
       const tipos = (cmd.acao === 'varios' ? (cmd.comandos || []) : [cmd]).map((c: any) => c.acao).join('+');
-      texto = `[${tipos}] ${rep.aba ? `[ABA ${rep.aba.c}: ${rep.aba.termos.join(', ')}] ` : ''}${rep.abas ? `[ABAS ${rep.abas.map((x: any) => x.c + ':' + x.t).join(', ')}] ` : ''}${(cmd.itens || []).map((it: any) => `[item ${it.titulo}: ${it.categoria}→${L.categoriaDe(it.titulo, [], it.categoria === 'trabalho' ? 'trabalho' : 'pessoal')}] `).join('')}${rep.text} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} ${rep.plan ? `[plano: ${rep.plan.filter((x: any) => x.isNew).map((x: any) => `${x.title} ${L.fmtTime(x.start)}`).join(', ')}]` : ''} ${rep.entrevista ? `[entrevista: ${rep.entrevista}]` : ''} {quinta depois: ${depois}} {rotinas: ${routines.map((x: any) => `${x.title} ${L.diasLabel(x.dias)} ${L.timeRange(x.start, x.end)}`).join('; ') || '-'}}`;
+      texto = `[${tipos}] ${rep.text} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} ${rep.plan ? `[plano: ${rep.plan.filter((x: any) => x.isNew).map((x: any) => `${x.title} ${L.fmtTime(x.start)}`).join(', ')}]` : ''} ${rep.entrevista ? `[entrevista: ${rep.entrevista}]` : ''} {agenda depois: ${depois}} {rotinas: ${routines.map((x: any) => `${x.title} ${L.diasLabel(x.dias)} ${L.timeRange(x.start, x.end)}`).join('; ') || '-'}}`;
       recent.push({ who: 'me', text: frase }, { who: 'bot', text: rep.text });
     } catch (e) { texto = `(resposta fora do formato) ${String(e)} ${String(body.text || JSON.stringify(body)).slice(0, 160)}`; }
     linhas.push(`"${frase}" → ${texto.replace(/\n/g, ' / ')}`);
