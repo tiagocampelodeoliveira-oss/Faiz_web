@@ -503,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 09:34';
+const APP_VERSION = '2026-11-10 09:43';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -1645,7 +1645,7 @@ async function send(text, opt = {}) {
   U.typing = true; U.scrollChat = true; render(true);
   const ctx = { now: new Date(), tasks: S.tasks, fin: S.fin, integ: S.integ || {}, routines: S.routines, entrevista: entrevistaCtx(), recentUser: S.chat.filter((m) => m.who === 'me').slice(-4).map((m) => m.text).join(' ') };
   let reply, failed = false;
-  if (Cloud.on && U.aiState !== 'off' && U.aiOn && !U.trialOver) {
+  if (Cloud.on && U.aiState !== 'off' && U.aiOn && !U.trialOver && !ehGratis()) {
     try {
       const recent = S.chat.slice(-7, -1).map((m) => ({ who: m.who, text: m.text }));
       const parts = L.buildPromptParts(clean, ctx, recent, { nome: (S.name || '').split(' ')[0] });
@@ -1663,7 +1663,7 @@ async function send(text, opt = {}) {
       let json;
       try { json = await tentar(); }
       catch (e) {
-        const definitivo = ['servidor_no_credit', 'servidor_trial_over', 'servidor_limit', 'servidor_free_limit', 'servidor_auth', 'sem_internet', 'cortada'].includes(e?.why);
+        const definitivo = ['servidor_no_credit', 'servidor_trial_over', 'servidor_limit', 'servidor_free_limit', 'servidor_free_plan', 'servidor_auth', 'sem_internet', 'cortada'].includes(e?.why);
         if (definitivo) throw e;
         S.stats.aiRetry = (S.stats.aiRetry || 0) + 1;
         json = await tentar();
@@ -1678,13 +1678,23 @@ async function send(text, opt = {}) {
       S.stats.aiFailWhy = { ...(S.stats.aiFailWhy || {}), [motivo]: ((S.stats.aiFailWhy || {})[motivo] || 0) + 1 };
       reply = L.interpret(clean, { now: new Date(), tasks: S.tasks, fin: S.fin, routines: S.routines });
       if (e?.code === 'no_credit') U.aiCredit = false;
+      if (e?.code === 'free_plan') { U.plano = { ...(U.plano || {}), plano: 'gratis' }; planoAtualiza(); }
       if (e?.code === 'free_limit') { reply.links = [...(reply.links || []), { label: '⭐ Ver o Plus', act: 'planos' }]; S.stats.limiteGratis = (S.stats.limiteGratis || 0) + 1; }
-      const why = e?.code === 'free_limit' ? `Você já usou as ${e?.limite || 5} mensagens de hoje comigo no Grátis 💜 Respondi do jeito simples; amanhã tem mais. No Plus é bem mais que isso, e com a minha versão completa.` : e?.code === 'trial_over' ? TRIAL_MSG : e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : e?.why === 'cortada' ? 'Esse pedido ficou grande demais pra mim de uma vez 😅 Respondi do jeito simples; tenta pedir em partes.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
+      const why = e?.code === 'free_plan' ? 'No Grátis eu respondo no modo simples, com frases diretas. No Plus eu entendo do seu jeito e monto planos com você.' : e?.code === 'free_limit' ? `Você já usou as ${e?.limite || 5} mensagens de hoje comigo no Grátis 💜 Respondi do jeito simples; amanhã tem mais. No Plus é bem mais que isso, e com a minha versão completa.` : e?.code === 'trial_over' ? TRIAL_MSG : e?.code === 'no_credit' ? 'Tô sem minha inteligência agora 😵 Enquanto isso, me fala direto, tipo “corrida amanhã às 7” ou “lembra de pagar a luz amanhã às 9h”.' : e?.code === 'limit' ? 'Você chegou ao limite de mensagens de hoje comigo. Respondi do jeito simples; amanhã eu volto com tudo.' : e?.code === 'busy' ? 'Tô sobrecarregada agora 😵 Respondi do jeito simples; tenta de novo daqui a pouco.' : !navigator.onLine ? 'Sem internet agora; respondi do jeito simples.' : e?.why === 'cortada' ? 'Esse pedido ficou grande demais pra mim de uma vez 😅 Respondi do jeito simples; tenta pedir em partes.' : 'Minha inteligência deu uma travada. Respondi do jeito simples; tenta de novo daqui a pouco.';
       if (why) reply.notes = [reply.notes, why].filter(Boolean).join('\n');
     }
   } else {
     reply = L.interpret(clean, ctx);
     if (U.trialOver && !S.trialNoted) { reply.notes = [reply.notes, TRIAL_MSG].filter(Boolean).join('\n'); S.trialNoted = true; }
+    // Grátis (sem IA): a Íris responde no modo simples; lembra do Plus uma vez por dia ou quando não entende
+    if (ehGratis()) {
+      const naoEntendeu = /^Ainda não entendi/.test(reply.text || '');
+      if (naoEntendeu || S.gratisNota !== today()) {
+        reply.notes = [reply.notes, naoEntendeu ? 'No Grátis eu entendo frases mais diretas, tipo “corrida amanhã às 7” ou “gastei 50 no mercado”. No Plus eu entendo do seu jeito, monto rotinas e treinos e converso com você.' : 'No Grátis eu respondo no modo simples. No Plus eu entendo do seu jeito, monto planos e converso com você.'].filter(Boolean).join('\n');
+        reply.links = [...(reply.links || []), { label: '⭐ Ver o Plus', act: 'planos' }];
+        S.gratisNota = today();
+      }
+    }
   }
   // Tipo do pedido (tarefa, rotina, contas...), só a categoria, para o relatório do teste.
   try { const kk = { ...(S.stats.kinds || {}) }; for (const k of L.replyKinds(reply)) kk[k] = (kk[k] || 0) + 1; S.stats.kinds = kk; } catch {}
@@ -2326,14 +2336,14 @@ function planosScreen(obrig) {
         ${fund ? '<div class="old">R$ 12,99</div>' : ''}
         <div class="price" style="${fund ? 'margin-top:2px' : ''}">${brl2(p.preco)}<small>/mês</small></div>
         <p class="psub">Para o Faiz resolver por você.</p>
-        <ul>${[ 'Íris completa: monta rotinas, treinos e cronogramas', 'Até 40 mensagens por dia com a Íris', 'Reorganiza o que ficou atrasado', 'Voz da Íris respondendo em voz alta', 'Google Agenda, Tarefas, Contatos e Gmail', 'Contas e todos os avisos'].map(check).join('')}</ul>
+        <ul>${[ 'Íris com IA: entende do seu jeito e monta rotinas, treinos e cronogramas', 'Até 40 mensagens por dia com a Íris', 'Reorganiza o que ficou atrasado', 'Voz da Íris respondendo em voz alta', 'Google Agenda, Tarefas, Contatos e Gmail', 'Contas e todos os avisos'].map(check).join('')}</ul>
         <button class="btn" type="button" data-pl="plus">${p.escolha === 'plus' ? 'Seu plano atual' : 'Quero o Plus'}</button>
       </div>
       <div class="pcard">
         <div class="pname">Faiz</div>
         <div class="price">Grátis</div>
         <p class="psub">Para organizar o dia.</p>
-        <ul>${['Íris rápida: 5 mensagens por dia', 'Avisos, agenda, tarefas e rotinas sem limite', 'Contas: gastos e contas fixas'].map(check).join('')}</ul>
+        <ul>${['Avisos, agenda, tarefas e rotinas sem limite', 'Contas: gastos e contas fixas', 'Íris no modo simples, sem IA: entende frases diretas, tipo “corrida amanhã às 7”'].map(check).join('')}</ul>
         <button class="btn soft" type="button" data-pl="gratis">${p.escolha === 'gratis' ? 'Seu plano atual' : 'Continuar no Grátis'}</button>
       </div>
       <p class="pnote">A cobrança ainda não começou. Escolhendo o Plus, você garante esse preço e segue com o Plus liberado de graça até a cobrança começar, em dezembro. Antes de cobrar a gente avisa, e dá para desistir.</p>
@@ -2802,7 +2812,7 @@ const screens = {
     };
     return `<main class="screen bg-peach" style="padding-bottom:0">
       <div class="head"><span>${irisImg('principal', 44)}</span><div style="text-align:center"><h1 class="screen-title">Íris</h1><div class="meta">sua governanta no Faiz</div></div><span></span></div>
-      ${ehGratis() ? '<p class="ai-note">Plano Grátis: 5 mensagens por dia com a Íris rápida. <button class="textbtn" type="button" data-act="planos" style="font-size:12.5px;padding:0">Ver o Plus</button></p>' : U.trialOver ? '<p class="ai-note">Seu teste de 7 dias com a IA terminou. Agora eu entendo frases mais diretas.</p>' : U.aiState === 'off' ? '<p class="ai-note">Modo simples: a IA não está disponível agora, então entendo frases mais diretas.</p>' : ''}${U.pushState !== 'on' && U.pushState !== 'checking' ? `<p class="ai-note">Avisos desligados neste celular. <button class="textbtn" type="button" data-act="notify" style="font-size:12.5px;padding:0">Ativar</button></p>` : ''}
+      ${ehGratis() ? '<p class="ai-note">Plano Grátis: eu entendo frases diretas, tipo “corrida amanhã às 7”. <button class="textbtn" type="button" data-act="planos" style="font-size:12.5px;padding:0">Ver o Plus</button></p>' : U.trialOver ? '<p class="ai-note">Seu teste de 7 dias com a IA terminou. Agora eu entendo frases mais diretas.</p>' : U.aiState === 'off' ? '<p class="ai-note">Modo simples: a IA não está disponível agora, então entendo frases mais diretas.</p>' : ''}${U.pushState !== 'on' && U.pushState !== 'checking' ? `<p class="ai-note">Avisos desligados neste celular. <button class="textbtn" type="button" data-act="notify" style="font-size:12.5px;padding:0">Ativar</button></p>` : ''}
       <div class="chat" id="chat" style="padding-top:6px">
         <div class="botrow">${irisImg('principal', 34)}<div class="msg bot">${intro}</div></div>
         ${S.chat.map(bubble).join('')}
@@ -2856,7 +2866,7 @@ const screens = {
       <div class="head"><button class="round" type="button" data-act="tab" data-v="hoje" aria-label="Voltar">${I.left}</button><h1 class="screen-title">Mais</h1><span></span></div>
       <div class="label">Avisos no celular</div>
       ${avisosCard()}
-      ${U.plano && U.plano.plano !== 'livre' ? `<div class="label">Seu plano</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris rápida com 5 mensagens por dia, Contas e avisos.' : 'Íris completa, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() ? 'navy' : ''}">${ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button></div>` : ''}
+      ${U.plano && U.plano.plano !== 'livre' ? `<div class="label">Seu plano</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris no modo simples (sem IA), Contas, avisos, agenda e rotinas.' : 'Íris com IA, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() ? 'navy' : ''}">${ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button></div>` : ''}
       <div class="label">Teste do Faiz</div>
       <div class="card">
         <button class="setrow" type="button" data-act="entrevista-de-novo"><div class="txt"><div class="t">Montar minha rotina com a Íris</div><div class="meta">${S.entrevista?.fim ? 'Feito. Toque para revisar trabalho, estudos e exercícios.' : 'Ela pergunta o que é fixo na sua semana e monta tudo.'}</div></div><span class="pill">${S.entrevista?.fim ? 'Revisar' : 'Começar'}</span></button>

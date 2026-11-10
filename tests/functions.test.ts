@@ -359,8 +359,8 @@ test('api: liberados pelo Tiago passam do limite de 40 por dia e do teste de 7 d
   db.states = [{ start: '2026-10-01', tz: 'America/Sao_Paulo' }] as any; // o banco de mentira devolve a linha como o select pede
   db.unlimited = [];
   const fl = await post(api, { action: 'ai', prompt: 'oi' }, auth);
-  assert.equal(fl.status, 429, 'sem liberação, teste acabou: plano Grátis, 5 por dia');
-  assert.equal((await fl.json()).error, 'free_limit');
+  assert.equal(fl.status, 403, 'sem liberação, teste acabou: plano Grátis, sem IA');
+  assert.equal((await fl.json()).error, 'free_plan');
   db.unlimited = [{ user_id: U }];
   db.ai_log = [];
   const r = await post(api, { action: 'ai', prompt: 'oi' }, auth);
@@ -371,7 +371,7 @@ test('api: liberados pelo Tiago passam do limite de 40 por dia e do teste de 7 d
   Object.assign(db, antes);
 });
 
-test('api: planos — Grátis usa só a Íris rápida (5 por dia), sem voz nem Google; escolher o Plus reserva e libera', async () => {
+test('api: planos — Grátis não tem IA, voz nem Google; escolher o Plus reserva e libera', async () => {
   const auth = { Authorization: 'Bearer user-token', apikey: 'anon' };
   const antes = { usage: db.usage, states: db.states, unlimited: db.unlimited, planos: db.planos, owners: db.owners };
   db.unlimited = []; db.planos = []; db.owners = [];
@@ -380,11 +380,10 @@ test('api: planos — Grátis usa só a Íris rápida (5 por dia), sem voz nem G
   try {
     let me = await (await post(api, { action: 'me' }, auth)).json();
     assert.equal(me.plano.plano, 'gratis'); assert.equal(me.plano.fundador, true); assert.equal(me.plano.preco, 999); assert.equal(me.plano.precisaEscolher, true);
-    db.usage = [{ n: 2 }]; models.length = 0;
-    assert.equal((await post(api, { action: 'ai', prompt: 'monta meu treino', modelo: 'completa' }, auth)).status, 200);
-    assert.deepEqual(models, ['claude-haiku-5-5'], 'Grátis sempre na Íris rápida');
-    db.usage = [{ n: 5 }];
-    assert.equal((await post(api, { action: 'ai', prompt: 'oi' }, auth)).status, 429);
+    db.usage = [{ n: 0 }]; models.length = 0;
+    const g = await post(api, { action: 'ai', prompt: 'monta meu treino', modelo: 'completa' }, auth);
+    assert.equal(g.status, 403); assert.equal((await g.json()).error, 'free_plan');
+    assert.deepEqual(models, [], 'Grátis não chama a IA');
     assert.equal((await post(api, { action: 'tts', text: 'oi' }, auth)).status, 403);
     assert.equal((await post(api, { action: 'gtoken' }, auth)).status, 403);
     // escolhe o Plus: reserva o preço de fundador e volta a ter a Íris completa

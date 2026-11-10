@@ -358,13 +358,12 @@ export function trialInfo(startDate: string | undefined, now: Date, tz = 'Americ
 }
 
 /* ---------- Planos (decisão do Tiago, 11/11) ----------
-   Grátis: Íris rápida com 5 mensagens por dia, Contas, avisos, agenda, tarefas e rotinas.
+   Grátis: sem IA (a Íris responde no modo simples), Contas, avisos, agenda, tarefas e rotinas.
    Plus: Íris completa, voz da Thalita e Google. Quem entrou até 10/11 é "fundador": R$ 9,99; depois, R$ 12,99.
    Gente nova tem 7 dias de Plus grátis (o teste). Enquanto a cobrança não existe, quem escolhe o Plus "reserva" o preço
    e continua no Plus de graça até a cobrança começar (dezembro). */
 export const FUNDADOR_ATE = '2026-11-10';
 export const PRECO = { fundador: 999, plus: 1299 };
-export const GRATIS_POR_DIA = 5;
 export type PlanoInfo = {
   plano: 'livre' | 'plus' | 'teste' | 'gratis';
   fundador: boolean;

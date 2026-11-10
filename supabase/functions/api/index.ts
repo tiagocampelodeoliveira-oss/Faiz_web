@@ -3,7 +3,7 @@
 import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
 import { falar, ttsLigado } from '../_shared/tts.ts';
-import { GRATIS_POR_DIA, localNow, planoDe, type PlanoInfo } from '../_shared/plan.ts';
+import { localNow, planoDe, type PlanoInfo } from '../_shared/plan.ts';
 import { aplicarAcao, confere, segredoAcoes } from '../_shared/acoes.ts';
 import { buildIcs } from '../_shared/ics.ts';
 
@@ -44,15 +44,14 @@ async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unk
   if (typeof prompt !== 'string' || !prompt.trim()) return json({ error: 'bad_request' }, 400);
   const pl = await planoUser(userId);
   const livre = pl.plano === 'livre';
-  // Grátis: só a Íris rápida, 5 mensagens por dia
-  const gratis = pl.plano === 'gratis';
-  if (gratis) modelo = 'rapida';
+  // Grátis não tem IA (decisão do Tiago, 11/11): o app responde no modo simples
+  if (pl.plano === 'gratis') return json({ error: 'free_plan' }, 403);
+  const gratis = false;
   const key = Deno.env.get('FAIZ_ANTHROPIC_KEY');
   if (!key) return json({ error: 'ai_off' }, 503);
   const day = new Date().toISOString().slice(0, 10);
   const rows = await rest(`usage?user_id=eq.${userId}&day=eq.${day}&select=n`);
   const n = rows?.[0]?.n ?? 0;
-  if (gratis && n >= GRATIS_POR_DIA) return json({ error: 'free_limit', limite: GRATIS_POR_DIA }, 429);
   if (n >= AI_DAILY_LIMIT && !livre) return json({ error: 'limit' }, 429);
   await rest('usage?on_conflict=user_id,day', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ user_id: userId, day, n: n + 1 }) });
   const call = (model: string) => fetch('https://api.anthropic.com/v1/messages', {
