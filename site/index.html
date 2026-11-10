@@ -503,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 11:50';
+const APP_VERSION = '2026-11-10 12:04';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -2455,10 +2455,25 @@ async function pixPlus() {
     <p class="meta" style="margin:0;text-align:center">No celular: copie o código e cole no app do seu banco, em Pix › Copia e cola.</p>
     <textarea id="pixCod" readonly rows="3" style="width:100%;font-size:12px;border-radius:12px;padding:10px;border:1px solid var(--line, #ddd);resize:none">${esc(r.codigo)}</textarea>
     <button class="btn" type="button" data-copy>Copiar código Pix</button>
+    <p id="pixCopiado" role="status" aria-live="polite" hidden style="margin:0;text-align:center;font-weight:700;color:var(--navy)"></p>
     <p class="meta" id="pixSt" style="margin:0;text-align:center" role="status">Esperando o pagamento... assim que cair, eu libero sozinha.</p>
     <button class="btn soft" type="button" data-close-sheet>Fechar</button>`, (s2) => {
     s2.querySelector('[data-close-sheet]').onclick = () => { clearTimeout(pixT); closeSheet(); };
-    s2.querySelector('[data-copy]').onclick = () => { const ta = s2.querySelector('#pixCod'); const ok = () => { S.stats.pixCopiou = (S.stats.pixCopiou || 0) + 1; save(); toast('Código copiado. Agora cole no app do seu banco.'); }; navigator.clipboard?.writeText(ta.value).then(ok, () => { ta.select(); toast('Selecionei o código: copie e cole no app do seu banco.'); }) || (ta.select(), toast('Selecionei o código: copie e cole no app do seu banco.')); };
+    // um toque: copia e avisa ali mesmo, no botão e na linha de baixo (o toast ficava escondido atrás da folha)
+    s2.querySelector('[data-copy]').onclick = async (ev) => {
+      const bt = ev.currentTarget, ta = s2.querySelector('#pixCod');
+      let ok = false;
+      try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (e) {}
+      if (!ok) { try { ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); ok = document.execCommand('copy'); } catch (e) {} }
+      const aviso = s2.querySelector('#pixCopiado');
+      if (ok) {
+        S.stats.pixCopiou = (S.stats.pixCopiou || 0) + 1; save();
+        bt.textContent = '✓ Código Pix copiado!';
+        aviso.textContent = 'Copiado! Agora abra o app do seu banco e cole em Pix › Copia e cola.';
+        clearTimeout(bt._t); bt._t = setTimeout(() => { if (bt.isConnected) bt.textContent = 'Copiar de novo'; }, 4000);
+      } else aviso.textContent = 'Não consegui copiar sozinha. Segure o dedo no código acima e toque em Copiar.';
+      aviso.hidden = false;
+    };
   });
   const fim = Math.min(Date.parse(r.expira) || Infinity, Date.now() + 30 * 60e3);
   clearTimeout(pixT);
