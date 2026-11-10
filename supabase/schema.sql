@@ -188,3 +188,20 @@ create table if not exists public.assinaturas (
   conferido_em timestamptz not null default now()
 );
 alter table public.assinaturas enable row level security;
+
+-- Pix de 1 mês do Plus: cada cobrança criada e se foi paga. "pix_ate" = até quando o Plus está pago por Pix.
+alter table public.assinaturas add column if not exists pix_ate date;
+create table if not exists public.pix_pagamentos (
+  mp_id text primary key,
+  user_id uuid not null references auth.users on delete cascade,
+  status text not null default 'pending',
+  valor int,
+  codigo text,
+  qr text,
+  expira timestamptz,
+  nome text,
+  criado_em timestamptz not null default now(),
+  pago_em timestamptz
+);
+create index if not exists pix_pagamentos_user on public.pix_pagamentos (user_id, criado_em desc);
+alter table public.pix_pagamentos enable row level security;

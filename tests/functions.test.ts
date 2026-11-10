@@ -52,7 +52,9 @@ const db = {
   push_actions: [] as any[],
   planos: [] as any[],
   assinaturas: [] as any[],
+  pix_pagamentos: [] as any[],
 };
+let mpPay: any = null;
 const mpCalls: { method: string; path: string; body: any }[] = [];
 let mpPre: any = null;
 const pushed: any[] = [];
@@ -96,6 +98,8 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
     if (method === 'POST' && url.pathname === '/preapproval') { mpPre = { id: 'pre1', status: 'pending', init_point: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=pre1', external_reference: body.external_reference, auto_recurring: body.auto_recurring, summarized: { charged_quantity: 0 } }; return Response.json(mpPre, { status: 201 }); }
     if (method === 'PUT' && url.pathname === '/preapproval/pre1') { mpPre = { ...mpPre, ...body, next_payment_date: null }; return Response.json(mpPre); }
     if (url.pathname === '/preapproval/pre1') return mpPre ? Response.json(mpPre) : Response.json({ message: 'not found' }, { status: 404 });
+    if (method === 'POST' && url.pathname === '/v1/payments') { mpPay = { id: 987654321, status: 'pending', payment_method_id: body.payment_method_id, external_reference: body.external_reference, transaction_amount: body.transaction_amount, date_of_expiration: body.date_of_expiration, point_of_interaction: { transaction_data: { qr_code: '00020126580014br.gov.bcb.pix...6304ABCD', qr_code_base64: 'iVBORw0KGgo=' } } }; return Response.json(mpPay, { status: 201 }); }
+    if (url.pathname === '/v1/payments/987654321') return Response.json(mpPay);
     if (url.pathname === '/preapproval/search') return Response.json({ results: mpPre ? [mpPre] : [] });
     if (url.pathname === '/authorized_payments/pay9') return Response.json({ id: 'pay9', preapproval_id: 'pre1', status: 'processed' });
     return Response.json({ message: 'not found' }, { status: 404 });
@@ -109,6 +113,12 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
     const id = Number(String(url.searchParams.get('id')).slice(3)), soNovo = url.searchParams.get('sent_at') === 'is.null';
     const hit = db.manual_push.filter((m: any) => m.id === id && (!soNovo || !m.sent_at));
     hit.forEach((m: any) => Object.assign(m, JSON.parse(String(init.body))));
+    return Response.json(hit);
+  }
+  if (method === 'PATCH' && table === 'pix_pagamentos') {
+    const q = (k: string) => String(url.searchParams.get(k) || '');
+    const hit = db.pix_pagamentos.filter((r: any) => 'eq.' + r.mp_id === q('mp_id') && (!q('status') || (q('status').startsWith('neq.') ? r.status !== q('status').slice(4) : r.status === q('status').slice(3))));
+    hit.forEach((r: any) => Object.assign(r, JSON.parse(String(init.body))));
     return Response.json(hit);
   }
   if (method === 'PATCH') { const v = JSON.parse(String(init.body)); (db as any)[table] = (db as any)[table].map((r: any) => ({ ...r, ...v })); return new Response(null, { status: 204 }); }
@@ -127,7 +137,7 @@ const realNow = Date.now;
 const setNow = (iso: string) => { const t = new Date(iso).getTime(); Date.now = () => t; (globalThis as any).Date = class extends Date { constructor(...a: any[]) { super(...(a.length ? a : [t])); } static now() { return t; } } as any; };
 
 import { planoDe } from '../supabase/functions/_shared/plan.ts';
-import { lerAssinatura } from '../supabase/functions/_shared/mp.ts';
+import { lerAssinatura, somaPix } from '../supabase/functions/_shared/mp.ts';
 await import('../supabase/functions/tick/index.ts');
 const tick = handler;
 await import('../supabase/functions/api/index.ts');
@@ -526,4 +536,58 @@ test('api: assinatura no Mercado Pago — cria, confere pelo aviso, cancela; nun
     assert.deepEqual(mpCalls.filter((x) => x.method === 'PUT').map((x) => [x.path, x.body.status]), [['/preapproval/pre1', 'cancelled']]);
     assert.equal(db.assinaturas.at(-1).status, 'cancelled'); assert.equal(db.assinaturas.at(-1).ate, '2026-12-11');
   } finally { delete env.FAIZ_MP_TOKEN; Object.assign(db, antes); mpPre = null; }
+});
+
+test('Pix de 1 mês: soma 30 dias a partir de hoje ou do fim do que já estava pago; vencido volta ao Grátis', () => {
+  assert.equal(somaPix('2026-12-03', [null, undefined], 30), '2027-01-02');
+  assert.equal(somaPix('2026-12-03', ['2026-12-20', '2026-12-10'], 30), '2027-01-19', 'renovar antes de vencer não perde dias');
+  assert.equal(somaPix('2026-12-03', ['2026-11-20'], 30), '2027-01-02', 'já vencido: conta de hoje');
+  const base = { startDate: '2026-11-01', livre: false, tz: 'America/Sao_Paulo', escolha: 'plus', cobrancaDesde: '2026-11-15' };
+  let p = planoDe({ ...base, now: new Date('2026-12-20T15:00:00Z'), assinatura: { status: 'pix', pix_ate: '2027-01-02' } });
+  assert.equal(p.plano, 'plus'); assert.equal(p.pago, true); assert.equal(p.forma, 'pix'); assert.equal(p.ate, '2027-01-02'); assert.equal(p.proximo, null);
+  p = planoDe({ ...base, now: new Date('2027-01-03T15:00:00Z'), assinatura: { status: 'pix', pix_ate: '2027-01-02' } });
+  assert.equal(p.plano, 'gratis'); assert.equal(p.pago, false); assert.equal(p.forma, null);
+  assert.equal(planoDe({ ...base, now: new Date('2026-12-20T15:00:00Z'), assinatura: { status: 'authorized', proximo: '2027-01-05' } }).forma, 'cartao');
+});
+
+test('api: Pix de 1 mês — cria o código, confere no Mercado Pago, libera 30 dias uma vez só e agenda os lembretes', async () => {
+  const auth = { Authorization: 'Bearer user-token', apikey: 'anon' }, authMail = { Authorization: 'Bearer user-mail', apikey: 'anon' };
+  const antes = { states: db.states, unlimited: db.unlimited, planos: db.planos, owners: db.owners, assinaturas: db.assinaturas, pix_pagamentos: db.pix_pagamentos, manual_push: db.manual_push };
+  db.unlimited = []; db.planos = []; db.assinaturas = []; db.pix_pagamentos = []; db.manual_push = []; mpCalls.length = 0; mpPay = null;
+  db.states = [{ start: '2026-11-01', tz: 'America/Sao_Paulo' }] as any;
+  db.owners = [{ user_id: U }];
+  setNow('2026-11-11T15:00:00Z');
+  env.FAIZ_MP_TOKEN = 'APP_USR-teste';
+  try {
+    assert.equal((await (await post(api, { action: 'pix' }, auth)).json()).error, 'precisa_google');
+    const r = await (await post(api, { action: 'pix', nome: 'Kauã Silva' }, authMail)).json();
+    assert.equal(r.id, '987654321'); assert.match(r.codigo, /^000201/); assert.equal(r.qr, 'iVBORw0KGgo='); assert.equal(r.valor, 990);
+    const cria = mpCalls.find((c) => c.method === 'POST' && c.path === '/v1/payments')!;
+    assert.equal(cria.body.transaction_amount, 9.9); assert.equal(cria.body.payment_method_id, 'pix'); assert.equal(cria.body.external_reference, U);
+    assert.equal(cria.body.payer.email, 'kaua@gmail.com'); assert.match(cria.body.notification_url, /functions\/v1\/api\?mp=aviso$/);
+    assert.equal(cria.body.date_of_expiration, '2026-11-11T15:30:00.000+00:00');
+    assert.equal(db.pix_pagamentos[0].status, 'pending');
+    // pedir de novo logo depois devolve o mesmo código (não cria outro)
+    const n0 = mpCalls.filter((c) => c.method === 'POST').length;
+    assert.equal((await (await post(api, { action: 'pix' }, authMail)).json()).id, '987654321');
+    assert.equal(mpCalls.filter((c) => c.method === 'POST').length, n0);
+    // ainda não pagou
+    let st = await (await post(api, { action: 'pixstatus', id: '987654321' }, auth)).json();
+    assert.equal(st.status, 'pending'); assert.equal(db.assinaturas.length, 0);
+    // pagou: o aviso do Mercado Pago chega (só o id) e a conferência do app também; soma 30 dias uma vez só
+    mpPay = { ...mpPay, status: 'approved' };
+    await api(new Request('https://proj.supabase.co/functions/v1/api?mp=aviso', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'payment', data: { id: '987654321' } }) }));
+    assert.equal(db.pix_pagamentos[0].status, 'approved');
+    assert.equal(db.assinaturas.length, 1); assert.equal(db.assinaturas[0].pix_ate, '2026-12-11');
+    st = await (await post(api, { action: 'pixstatus', id: '987654321' }, auth)).json();
+    assert.equal(st.status, 'approved'); assert.equal(db.assinaturas.length, 1, 'não soma duas vezes');
+    assert.deepEqual(db.manual_push.map((m: any) => [m.title, m.send_at, m.url]), [['Seu Plus vence em 3 dias ⭐', '2026-12-08T13:00:00.000Z', './?v=planos'], ['Seu Plus vence hoje ⏰', '2026-12-11T13:00:00.000Z', './?v=planos']]);
+    // o plano mostra Plus por Pix até 11/12
+    db.owners = []; db.planos = [{ escolha: 'plus' }]; db.assinaturas = [{ status: 'pix', pix_ate: '2026-12-11', conferido_em: new Date().toISOString() }];
+    const me = await (await post(api, { action: 'me' }, auth)).json();
+    assert.equal(me.plano.plano, 'plus'); assert.equal(me.plano.forma, 'pix'); assert.equal(me.plano.ate, '2026-12-11');
+    // pagamento que não é desta pessoa (o banco não devolve a linha): 404
+    db.pix_pagamentos = [];
+    assert.equal((await post(api, { action: 'pixstatus', id: '111' }, auth)).status, 404);
+  } finally { delete env.FAIZ_MP_TOKEN; Object.assign(db, antes); mpPay = null; }
 });

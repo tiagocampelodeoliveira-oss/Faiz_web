@@ -73,6 +73,18 @@ if (mpTok) {
     else {
       step(`MERCADO PAGO: chave aceita nas assinaturas (${j.paging?.total ?? 0} até agora) · meios de pagamento ${pm.status} · ${mpTok.startsWith('APP_USR-') ? 'formato de produção' : 'formato de teste'}`);
       secrets.push({ name: 'FAIZ_MP_TOKEN', value: mpTok });
+      // Só quando o commit traz [pix-teste]: cria um Pix de teste (ninguém paga) e cancela na hora, para conferir se a conta recebe Pix.
+      if (process.env.PIX_TESTE === 'true') {
+        const c = await fetch('https://api.mercadopago.com/v1/payments', { method: 'POST', headers: { ...H, 'Content-Type': 'application/json', 'X-Idempotency-Key': randomBytes(16).toString('hex') }, body: JSON.stringify({ transaction_amount: 9.9, description: 'Faiz Plus (1 mês)', payment_method_id: 'pix', external_reference: 'teste-do-deploy', date_of_expiration: new Date(Date.now() + 30 * 60e3).toISOString().replace('Z', '+00:00'), payer: { email: 'teste@example.com' } }) });
+        const cj: any = await c.json().catch(() => ({}));
+        if (!c.ok || !cj.id) console.log(`::warning::PIX TESTE: criar o Pix falhou (${c.status} ${String(cj.message || cj.error || '').slice(0, 200)} ${JSON.stringify(cj.cause || '').slice(0, 200)})`);
+        else {
+          const td = cj.point_of_interaction?.transaction_data || {};
+          const x = await fetch(`https://api.mercadopago.com/v1/payments/${cj.id}`, { method: 'PUT', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) });
+          const xj: any = await x.json().catch(() => ({}));
+          step(`PIX TESTE: Pix criado (status ${cj.status}, código ${String(td.qr_code || '').startsWith('000201') ? 'ok' : 'FALTOU'}, QR ${td.qr_code_base64 ? 'ok' : 'FALTOU'}, valor ${cj.transaction_amount}, vence ${cj.date_of_expiration}, taxa ${JSON.stringify((cj.fee_details || []).map((f: any) => f.amount))}) e cancelado (${x.status} ${xj.status || String(xj.message || '').slice(0, 80)})`);
+        }
+      }
       // Só quando o commit traz [mp-teste]: cria uma assinatura de teste (ninguém paga) e cancela na hora, para conferir o formato.
       if (process.env.MP_TESTE === 'true') {
         const c = await fetch('https://api.mercadopago.com/preapproval', { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Faiz Plus', external_reference: 'teste-do-deploy', payer_email: 'teste@example.com', back_url: SITE_URL + '?v=assinatura', status: 'pending', auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 9.9, currency_id: 'BRL' } }) });

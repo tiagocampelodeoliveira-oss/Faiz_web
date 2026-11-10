@@ -503,7 +503,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 11:18';
+const APP_VERSION = '2026-11-10 11:32';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -2148,6 +2148,7 @@ function openLink(href) {
   else if (v === 'noite') { U.tab = 'hoje'; render(); nightSheet(); }
   else if (v === 'planejar') { U.tab = 'faz'; U.scrollChat = true; render(); }
   else if (v === 'assinatura') { U.tab = 'mais'; render(); assinaturaVoltou(); }
+  else if (v === 'planos') { U.tab = 'hoje'; render(); planoAtualiza().finally(() => planosScreen(false)); }
   else if (v === 'novidade') { U.tab = 'hoje'; render(); novidadeSheet(); }
   else if (v === 'contas') { U.tab = 'contas'; U.mes = null; U.finTab = 'geral'; render(); window.scrollTo(0, 0); }
   else if (v === 'pesquisa') { U.tab = 'hoje'; render(); const q = pesquisaDevida(); if (q) surveySheet(q); else toast('Você já respondeu. Valeu! 💜'); }
@@ -2312,7 +2313,7 @@ const ehGratis = () => U.plano?.plano === 'gratis';
 function planoNome() {
   const p = U.plano; if (!p) return '';
   if (p.plano === 'livre') return 'Liberado pelo time do Faiz';
-  if (p.plano === 'plus' && p.pago) return p.assinatura === 'authorized' ? `Plus · ${brl2(p.preco)}/mês` : `Plus até ${L.ddmm(p.ate)} (cancelado)`;
+  if (p.plano === 'plus' && p.pago) return p.assinatura === 'authorized' ? `Plus · ${brl2(p.preco)}/mês` : p.forma === 'pix' ? `Plus até ${L.ddmm(p.ate)} (Pix)` : `Plus até ${L.ddmm(p.ate)} (cancelado)`;
   if (p.plano === 'plus') return p.cobranca ? `Plus · falta confirmar o pagamento` : `Plus · ${brl2(p.preco)}/mês reservado`;
   if (p.plano === 'teste') return `Teste do Plus${p.fimTeste ? ' até ' + L.ddmm(p.fimTeste) : ''}`;
   return 'Grátis';
@@ -2338,7 +2339,8 @@ function planosScreen(obrig) {
         <div class="price">${brl2(p.preco)}<small>/mês</small></div>
         <p class="psub">Para o Faiz resolver por você.</p>
         <ul>${[ 'Íris com IA: entende do seu jeito e monta rotinas, treinos e cronogramas', 'Até 40 mensagens por dia com a Íris', 'Reorganiza o que ficou atrasado', 'Voz da Íris respondendo em voz alta', 'Google Agenda, Tarefas, Contatos e Gmail', 'Contas e todos os avisos'].map(check).join('')}</ul>
-        <button class="btn" type="button" data-pl="plus">${p.pago ? 'Seu plano atual' : p.cobranca ? `Assinar por ${brl2(p.preco)}/mês` : p.escolha === 'plus' ? 'Seu plano atual' : 'Quero o Plus'}</button>
+        <button class="btn" type="button" data-pl="plus">${p.assinatura === 'authorized' ? 'Seu plano atual' : p.cobranca ? `Assinar no cartão · ${brl2(p.preco)}/mês` : p.escolha === 'plus' ? 'Seu plano atual' : 'Quero o Plus'}</button>
+        ${p.cobranca && p.assinatura !== 'authorized' ? `<button class="btn soft" type="button" data-pl="pix" style="margin-top:8px">${p.forma === 'pix' ? 'Renovar com Pix' : 'Pagar 1 mês com Pix'} · ${brl2(p.preco)}</button><p class="meta" style="margin:8px 0 0;text-align:center">${p.forma === 'pix' ? `Seu Plus está pago até ${L.ddmm(p.ate)}. Renovando agora, os 30 dias somam depois dessa data.` : 'Cartão renova sozinho todo mês. Pix vale 30 dias e eu te lembro de renovar.'}</p>` : ''}
       </div>
       <div class="pcard">
         <div class="pname">Faiz</div>
@@ -2348,7 +2350,7 @@ function planosScreen(obrig) {
         <p class="meta" style="margin:-6px 0 14px">Fica de fora: a Íris com IA, a voz da Íris e o Google.</p>
         <button class="btn soft" type="button" data-pl="gratis">${p.escolha === 'gratis' ? 'Seu plano atual' : 'Continuar no Grátis'}</button>
       </div>
-      <p class="pnote">${p.cobranca ? `O pagamento é pelo Mercado Pago, no cartão, todo mês a partir do dia em que você assina. O Faiz não vê os dados do seu cartão. Dá para cancelar quando quiser em Mais › Seu plano.${p.pagarAte && !p.pago ? ` Seu Plus reservado vale até ${L.ddmm(p.pagarAte)}.` : ''}` : 'A cobrança ainda não começou. Escolhendo o Plus, você garante esse preço e segue com o Plus liberado de graça até a cobrança começar, em dezembro. Antes de cobrar a gente avisa, e dá para desistir.'}</p>
+      <p class="pnote">${p.cobranca ? `O pagamento é pelo Mercado Pago: no cartão, todo mês a partir do dia em que você assina (dá para cancelar quando quiser em Mais › Seu plano), ou por Pix, um mês por vez. O Faiz não vê os dados do seu cartão.${p.pagarAte && !p.pago ? ` Seu Plus reservado vale até ${L.ddmm(p.pagarAte)}.` : ''}` : 'A cobrança ainda não começou. Escolhendo o Plus, você garante esse preço e segue com o Plus liberado de graça até a cobrança começar, em dezembro. Antes de cobrar a gente avisa, e dá para desistir.'}</p>
     </div>`;
   document.body.appendChild(el);
   U.planosAberto = true; S.stats.planosVistos = (S.stats.planosVistos || 0) + 1; save();
@@ -2357,8 +2359,10 @@ function planosScreen(obrig) {
     const b = e.target.closest('[data-pl]'); if (!b) return;
     if (b.dataset.pl === 'fechar') return fecha();
     const escolha = b.dataset.pl;
-    if (escolha === 'plus' && U.plano.pago) return fecha();
+    if (escolha === 'pix') { fecha(); return pixPlus(); }
+    if (escolha === 'plus' && U.plano.assinatura === 'authorized') return fecha();
     if (escolha === 'plus' && U.plano.cobranca) { fecha(); return assinarPlus(); }
+    if (escolha === 'plus' && U.plano.pago) return fecha();
     if (U.plano.escolha === escolha && !(escolha === 'gratis' && U.plano.assinatura === 'authorized')) return fecha();
     if (escolha === 'gratis' && U.plano.assinatura === 'authorized') { fecha(); return cancelarPlus(); }
     b.disabled = true; b.textContent = 'Salvando...';
@@ -2427,6 +2431,53 @@ async function assinaturaVoltou(tentativa = 0) {
     if (tentativa < 3) { if (!tentativa) toast('Conferindo o pagamento no Mercado Pago...'); return setTimeout(() => assinaturaVoltou(tentativa + 1), 8000); }
     toast(p.assinatura === 'pending' ? 'O Mercado Pago ainda não confirmou. Se você pagou, o Plus entra sozinho em alguns minutos.' : 'O pagamento não foi concluído. Dá para tentar de novo em Mais › Seu plano.');
   } catch (e) { toast('Não consegui conferir o pagamento agora. Ele aparece em Mais › Seu plano.'); }
+}
+/** Pix de 1 mês: mostra o QR code e o copia-e-cola e fica conferindo até o Pix cair (o código vale 30 minutos). */
+let pixT = null;
+async function pixPlus() {
+  if (!Cloud.on) return toast('Sem conexão com o servidor agora.');
+  if (!S.account?.google) return precisaGoogleSheet();
+  S.stats.pixAbriu = (S.stats.pixAbriu || 0) + 1; save();
+  toast('Gerando o seu Pix...');
+  let r;
+  try { r = await Cloud.fn('pix', { nome: S.name }); }
+  catch (e) {
+    if (e?.code === 'precisa_google') return precisaGoogleSheet();
+    if (e?.code === 'cobranca_off') return toast('O pagamento ainda não começou. Seu Plus segue liberado 💜');
+    return toast('Não consegui gerar o Pix agora. Tente de novo daqui a pouco.');
+  }
+  if (r?.ja) { if (r.plano) U.plano = r.plano; render(true); return toast('Seu Plus já está pago ✅'); }
+  if (!r?.codigo) return toast('Não consegui gerar o Pix agora. Tente de novo daqui a pouco.');
+  const id = r.id;
+  sheet(`<div class="row" style="gap:10px">${irisImg('principal', 56)}<div class="sub" style="flex:1"><b>Pix de ${brl2(r.valor || U.plano?.preco || 990)}</b><div class="meta">30 dias de Plus. Não renova sozinho.</div></div></div>
+    ${r.qr ? `<img id="pixQr" alt="QR code do Pix" src="data:image/png;base64,${esc(r.qr)}" style="display:block;width:200px;height:200px;margin:4px auto;border-radius:12px;background:#fff;padding:8px">` : ''}
+    <p class="meta" style="margin:0;text-align:center">No celular: copie o código e cole no app do seu banco, em Pix › Copia e cola.</p>
+    <textarea id="pixCod" readonly rows="3" style="width:100%;font-size:12px;border-radius:12px;padding:10px;border:1px solid var(--line, #ddd);resize:none">${esc(r.codigo)}</textarea>
+    <button class="btn" type="button" data-copy>Copiar código Pix</button>
+    <p class="meta" id="pixSt" style="margin:0;text-align:center" role="status">Esperando o pagamento... assim que cair, eu libero sozinha.</p>
+    <button class="btn soft" type="button" data-close-sheet>Fechar</button>`, (s2) => {
+    s2.querySelector('[data-close-sheet]').onclick = () => { clearTimeout(pixT); closeSheet(); };
+    s2.querySelector('[data-copy]').onclick = () => { const ta = s2.querySelector('#pixCod'); const ok = () => { S.stats.pixCopiou = (S.stats.pixCopiou || 0) + 1; save(); toast('Código copiado. Agora cole no app do seu banco.'); }; navigator.clipboard?.writeText(ta.value).then(ok, () => { ta.select(); toast('Selecionei o código: copie e cole no app do seu banco.'); }) || (ta.select(), toast('Selecionei o código: copie e cole no app do seu banco.')); };
+  });
+  const fim = Math.min(Date.parse(r.expira) || Infinity, Date.now() + 30 * 60e3);
+  clearTimeout(pixT);
+  const confere = async () => {
+    if (!document.getElementById('pixCod')) return; // a folha foi fechada
+    try {
+      const st = await Cloud.fn('pixstatus', { id });
+      if (st?.plano) U.plano = st.plano;
+      if (st?.status === 'approved') {
+        S.stats.pixPagou = new Date().toISOString(); save(); closeSheet(); render(true);
+        return sheet(`<div class="row" style="gap:10px">${irisImg('comemorando', 56)}<div class="sub" style="flex:1"><b>Pix recebido! 🎉</b></div></div>
+          <p style="margin:0">Seu Plus está ativo${U.plano?.ate ? ` até <b>${L.ddmm(U.plano.ate)}</b>` : ''}. Eu te aviso uns dias antes de vencer.</p>
+          <button class="btn" type="button" data-close-sheet>Bora!</button>`, (s3) => { s3.querySelector('[data-close-sheet]').onclick = closeSheet; });
+      }
+      if (st?.status && st.status !== 'pending' && st.status !== 'in_process') { const el = document.getElementById('pixSt'); if (el) el.textContent = 'Esse Pix não vale mais. Feche e gere outro.'; return; }
+    } catch (e) {}
+    if (Date.now() > fim) { const el = document.getElementById('pixSt'); if (el) el.textContent = 'O código venceu (vale 30 minutos). Feche e gere outro.'; return; }
+    pixT = setTimeout(confere, 5000);
+  };
+  pixT = setTimeout(confere, 5000);
 }
 function cancelarPlus() {
   const p = U.plano || {};
@@ -2936,7 +2987,7 @@ const screens = {
       <div class="head"><button class="round" type="button" data-act="tab" data-v="hoje" aria-label="Voltar">${I.left}</button><h1 class="screen-title">Mais</h1><span></span></div>
       <div class="label">Avisos no celular</div>
       ${avisosCard()}
-      ${U.plano && U.plano.plano !== 'livre' ? `<div class="label">Seu plano</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris no modo simples (sem IA), Contas, avisos, agenda e rotinas.' : U.plano.pago && U.plano.proximo ? `Próxima cobrança em ${L.ddmm(U.plano.proximo)}, pelo Mercado Pago.` : U.plano.cobranca && !U.plano.pago && U.plano.pagarAte ? `Confirme o pagamento até ${L.ddmm(U.plano.pagarAte)} para continuar no Plus.` : 'Íris com IA, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() || (U.plano.cobranca && !U.plano.pago) ? 'navy' : ''}">${U.plano.cobranca && !U.plano.pago ? 'Assinar' : ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button>${U.plano.assinatura === 'authorized' ? '<button class="setrow" type="button" data-act="cancelar-plus"><div class="txt"><div class="t">Cancelar assinatura</div><div class="meta">Sem multa. O mês já pago continua valendo.</div></div><span class="pill">Cancelar</span></button>' : ''}</div>` : ''}
+      ${U.plano && U.plano.plano !== 'livre' ? `<div class="label">Seu plano</div><div class="card"><button class="setrow" type="button" data-act="planos"><div class="txt"><div class="t">${esc(planoNome())}</div><div class="meta">${ehGratis() ? 'Íris no modo simples (sem IA), Contas, avisos, agenda e rotinas.' : U.plano.pago && U.plano.proximo ? `Próxima cobrança em ${L.ddmm(U.plano.proximo)}, pelo Mercado Pago.` : U.plano.pago && U.plano.forma === 'pix' ? `Pago por Pix. Não renova sozinho: toque para renovar quando quiser.` : U.plano.cobranca && !U.plano.pago && U.plano.pagarAte ? `Confirme o pagamento até ${L.ddmm(U.plano.pagarAte)} para continuar no Plus.` : 'Íris com IA, voz, Google, Contas e avisos.'}</div></div><span class="pill ${ehGratis() || (U.plano.cobranca && !U.plano.pago) ? 'navy' : ''}">${U.plano.cobranca && !U.plano.pago ? 'Assinar' : U.plano.forma === 'pix' && U.plano.cobranca ? 'Renovar' : ehGratis() ? 'Ver o Plus' : 'Ver planos'}</span></button>${U.plano.assinatura === 'authorized' ? '<button class="setrow" type="button" data-act="cancelar-plus"><div class="txt"><div class="t">Cancelar assinatura</div><div class="meta">Sem multa. O mês já pago continua valendo.</div></div><span class="pill">Cancelar</span></button>' : ''}</div>` : ''}
       <div class="label">Teste do Faiz</div>
       <div class="card">
         <button class="setrow" type="button" data-act="entrevista-de-novo"><div class="txt"><div class="t">Montar minha rotina com a Íris</div><div class="meta">${S.entrevista?.fim ? 'Feito. Toque para revisar trabalho, estudos e exercícios.' : 'Ela pergunta o que é fixo na sua semana e monta tudo.'}</div></div><span class="pill">${S.entrevista?.fim ? 'Revisar' : 'Começar'}</span></button>

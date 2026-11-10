@@ -370,7 +370,9 @@ export const PRECO = { fundador: 990, plus: 990 };
 export const COBRANCA_DESDE: string | null = null;
 export const PAGAR_DIAS = 7;
 /** Assinatura no Mercado Pago (tabela assinaturas): status do MP e até quando já está pago (se cancelou). */
-export type Assinatura = { status: string; ate?: string | null; proximo?: string | null };
+export type Assinatura = { status: string; ate?: string | null; proximo?: string | null; pix_ate?: string | null };
+/** Pix: paga 1 mês por vez (não renova sozinho). */
+export const PIX_DIAS = 30;
 export type PlanoInfo = {
   plano: 'livre' | 'plus' | 'teste' | 'gratis';
   fundador: boolean;
@@ -387,6 +389,8 @@ export type PlanoInfo = {
   ate: string | null;
   /** o app pode mostrar o botão de pagar (cobrança ligada, ou dono testando) */
   cobranca: boolean;
+  /** 'cartao' = assinatura que renova sozinha; 'pix' = mês pago por Pix (vale até `ate`) */
+  forma: 'cartao' | 'pix' | null;
   /** reservou o Plus e precisa pagar até esta data para continuar (só com a cobrança ligada) */
   pagarAte: string | null;
 };
@@ -400,14 +404,18 @@ export function planoDe(o: { startDate?: string; escolha?: string | null; livre:
   const a = o.assinatura || null;
   const desde = o.cobrancaDesde === undefined ? COBRANCA_DESDE : o.cobrancaDesde;
   const ligada = !!desde && desde <= hoje;
-  const pago = !!a && (a.status === 'authorized' || (!!a.ate && a.ate >= hoje));
+  const cartao = !!a && (a.status === 'authorized' || (!!a.ate && a.ate >= hoje));
+  const pix = !!a?.pix_ate && a.pix_ate >= hoje;
+  const pago = cartao || pix;
+  const ate = [a?.status === 'authorized' ? null : a?.ate, a?.pix_ate].filter((d): d is string => !!d && d >= hoje).sort().pop() ?? null;
   const pagarAte = ligada && escolha === 'plus' && !pago ? new Date(Date.parse(desde + 'T12:00:00Z') + PAGAR_DIAS * 864e5).toISOString().slice(0, 10) : null;
   const reservaVale = escolha === 'plus' && (!ligada || (pagarAte !== null && hoje <= pagarAte));
   const plano = o.livre ? 'livre' : pago || reservaVale ? 'plus' : !t.acabou ? 'teste' : 'gratis';
   return {
     plano, fundador, preco: fundador ? PRECO.fundador : PRECO.plus, escolha, testeDia: t.dia, fimTeste,
     precisaEscolher: !o.livre && ok && !escolha && !pago && (fundador || t.acabou),
-    pago, assinatura: a?.status ?? null, proximo: a?.proximo ?? null, ate: a?.ate ?? null,
+    pago, assinatura: a?.status ?? null, proximo: a?.status === 'authorized' ? a?.proximo ?? null : null, ate,
+    forma: a?.status === 'authorized' ? 'cartao' : pix ? 'pix' : cartao ? 'cartao' : null,
     cobranca: ligada || !!o.dono, pagarAte,
   };
 }

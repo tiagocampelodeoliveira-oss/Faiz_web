@@ -3,8 +3,8 @@
 import { cors, getUser, json, rest, vapid } from '../_shared/env.ts';
 import { sendPush, type Subscription } from '../_shared/webpush.ts';
 import { falar, ttsLigado } from '../_shared/tts.ts';
-import { localNow, planoDe, type PlanoInfo } from '../_shared/plan.ts';
-import { corpoAssinatura, lerAssinatura, mp, mpToken } from '../_shared/mp.ts';
+import { localNow, PIX_DIAS, planoDe, type PlanoInfo } from '../_shared/plan.ts';
+import { corpoAssinatura, corpoPix, lerAssinatura, mp, mpToken, somaPix } from '../_shared/mp.ts';
 import { aplicarAcao, confere, segredoAcoes } from '../_shared/acoes.ts';
 import { buildIcs } from '../_shared/ics.ts';
 
@@ -24,7 +24,7 @@ async function planoUser(userId: string): Promise<PlanoInfo> {
     semLimite(userId),
     rest(`states?user_id=eq.${userId}&select=start:data->>startDate,tz:data->settings->>tz`).then((r: any) => r?.[0]),
     rest(`planos?user_id=eq.${userId}&select=escolha`).then((r: any) => r?.[0]?.escolha ?? null).catch(() => null),
-    rest(`assinaturas?user_id=eq.${userId}&select=status,ate,proximo`).then((r: any) => r?.[0] ?? null).catch(() => null),
+    rest(`assinaturas?user_id=eq.${userId}&select=status,ate,proximo,pix_ate`).then((r: any) => r?.[0] ?? null).catch(() => null),
     rest(`owners?user_id=eq.${userId}&select=user_id`).then((r: any) => !!r?.length).catch(() => false),
   ]);
   return planoDe({ startDate: row?.start, escolha: esc, livre, now: new Date(), tz: row?.tz || 'America/Sao_Paulo', assinatura: ass, dono });
@@ -81,6 +81,68 @@ async function cancelar(userId: string): Promise<Response> {
   return json({ plano: await planoUser(userId) });
 }
 
+/* ---------- Pix de 1 mês (não renova sozinho; o Faiz lembra perto de vencer) ---------- */
+const AVISO_MP = () => `${Deno.env.get('SUPABASE_URL')}/functions/v1/api?mp=aviso`;
+const PIX_URL = './?v=planos';
+
+async function pixCriar(user: { id: string; email?: string }, nome: unknown): Promise<Response> {
+  if (!mpToken()) return json({ error: 'mp_off' }, 503);
+  const pl = await planoUser(user.id);
+  if (!pl.cobranca) return json({ error: 'cobranca_off' }, 403);
+  if (pl.assinatura === 'authorized') return json({ ja: true, plano: pl });
+  if (!user.email) return json({ error: 'precisa_google' }, 409);
+  const agora = new Date();
+  // um Pix ainda aberto, criado há pouco: devolve o mesmo (não gera vários códigos)
+  const [aberto] = (await rest(`pix_pagamentos?user_id=eq.${user.id}&status=eq.pending&criado_em=gte.${new Date(agora.getTime() - 20 * 60e3).toISOString()}&select=mp_id,codigo,qr,expira&order=criado_em.desc&limit=1`).catch(() => [])) || [];
+  if (aberto?.codigo) return json({ id: aberto.mp_id, codigo: aberto.codigo, qr: aberto.qr, expira: aberto.expira, valor: pl.preco });
+  const pay = await mp('/v1/payments', { method: 'POST', headers: { 'X-Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(corpoPix({ userId: user.id, email: user.email, preco: pl.preco, aviso: AVISO_MP(), agora })) });
+  const td = pay?.point_of_interaction?.transaction_data;
+  if (!pay?.id || !td?.qr_code) throw new Error('mp sem codigo pix');
+  const row = { mp_id: String(pay.id), user_id: user.id, status: 'pending', valor: pl.preco, codigo: td.qr_code, qr: td.qr_code_base64 || null, expira: pay.date_of_expiration || new Date(agora.getTime() + 30 * 60e3).toISOString(), nome: String(nome || '').slice(0, 40) };
+  await rest('pix_pagamentos', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) });
+  return json({ id: row.mp_id, codigo: row.codigo, qr: row.qr, expira: row.expira, valor: pl.preco });
+}
+
+/** Lê o pagamento no Mercado Pago e, se foi aprovado, soma 30 dias de Plus (uma vez só por pagamento). */
+async function pixAplica(pay: any): Promise<string> {
+  const uid = String(pay?.external_reference || ''), id = String(pay?.id || ''), status = String(pay?.status || '');
+  if (!id || !/^[0-9a-f-]{36}$/.test(uid) || pay?.payment_method_id !== 'pix') return status;
+  if (status !== 'approved') {
+    if (status !== 'pending' && status !== 'in_process') await rest(`pix_pagamentos?mp_id=eq.${id}&user_id=eq.${uid}&status=eq.pending`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status }) }).catch(() => {});
+    return status;
+  }
+  // só quem muda de "não aprovado" para "aprovado" soma os dias (o aviso e a conferência podem chegar juntos)
+  const won = await rest(`pix_pagamentos?mp_id=eq.${id}&user_id=eq.${uid}&status=neq.approved`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ status: 'approved', pago_em: new Date().toISOString() }) });
+  if (!won?.length) return status;
+  const [st] = (await rest(`states?user_id=eq.${uid}&select=tz:data->settings->>tz`).catch(() => [])) || [];
+  const hoje = localNow(new Date(), st?.tz || 'America/Sao_Paulo').date;
+  const [a] = (await rest(`assinaturas?user_id=eq.${uid}&select=status,ate,pix_ate`).catch(() => [])) || [];
+  const ate = somaPix(hoje, [a?.pix_ate, a?.ate], PIX_DIAS);
+  await rest('assinaturas?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: uid, status: a?.status || 'pix', pix_ate: ate, conferido_em: new Date().toISOString() }) });
+  await rest('planos?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: uid, escolha: 'plus', escolhido_em: new Date().toISOString() }) }).catch(() => {});
+  // lembretes de renovar: 3 dias antes e no dia, às 10h de Brasília (os antigos saem)
+  const dm = ate.split('-').reverse().slice(0, 2).join('/');
+  const as10 = (d: string, menos: number) => new Date(Date.parse(d + 'T13:00:00Z') - menos * 864e5).toISOString();
+  await rest(`manual_push?user_id=eq.${uid}&sent_at=is.null&url=eq.${encodeURIComponent(PIX_URL)}`, { method: 'DELETE' }).catch(() => {});
+  await rest('manual_push', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify([
+    { user_id: uid, title: 'Seu Plus vence em 3 dias ⭐', body: `Vale até ${dm}. Renova com um Pix pra eu continuar resolvendo tudo por você?`, url: PIX_URL, send_at: as10(ate, 3) },
+    { user_id: uid, title: 'Seu Plus vence hoje ⏰', body: 'Um Pix de R$ 9,90 e a gente segue junto por mais 30 dias.', url: PIX_URL, send_at: as10(ate, 0) },
+  ]) }).catch((e) => console.error('lembrete pix', e));
+  const n = String(won[0]?.nome || 'Alguém').split(' ')[0].slice(0, 30);
+  await notifyOwners(`owner:pix:${id}`, { title: `${n} pagou o Plus no Pix 💰`, body: `R$ ${((won[0]?.valor ?? 990) / 100).toFixed(2).replace('.', ',')}. Plus até ${dm}.`, url: './', tag: 'mp' }).catch(() => {});
+  return status;
+}
+
+/** O app pergunta se o Pix já caiu (confere no Mercado Pago). */
+async function pixStatus(userId: string, id: unknown): Promise<Response> {
+  if (typeof id !== 'string' || !/^\d{1,30}$/.test(id)) return json({ error: 'bad_request' }, 400);
+  const [row] = (await rest(`pix_pagamentos?mp_id=eq.${id}&user_id=eq.${userId}&select=status`)) || [];
+  if (!row) return json({ error: 'not_found' }, 404);
+  let status = row.status;
+  if (status === 'pending') status = await pixAplica(await mp(`/v1/payments/${id}`));
+  return json({ status, plano: await planoUser(userId) });
+}
+
 /** Aviso do Mercado Pago (webhook). Não confia no corpo: busca a assinatura no Mercado Pago pela chave do Faiz. */
 async function webhookMp(body: Record<string, any>, url: URL): Promise<Response> {
   try {
@@ -88,6 +150,7 @@ async function webhookMp(body: Record<string, any>, url: URL): Promise<Response>
     const id = String(body.data?.id || url.searchParams.get('data.id') || url.searchParams.get('id') || '');
     if (!id || !/^[\w-]{1,64}$/.test(id)) return json({ ok: true });
     let pre: any = null;
+    if (tipo === 'payment') { await pixAplica(await mp(`/v1/payments/${id}`)); return json({ ok: true }); }
     if (tipo.includes('authorized_payment')) {
       const pay = await mp(`/authorized_payments/${id}`);
       if (pay?.preapproval_id) pre = await mp(`/preapproval/${encodeURIComponent(pay.preapproval_id)}`);
@@ -405,6 +468,8 @@ Deno.serve(async (req) => {
     if (action === 'assinar') return await assinar(user, body.nome);
     if (action === 'assinatura') { if (mpToken()) await sincroniza(user.id).catch((e) => console.error('sync', e)); return json({ plano: await planoUser(user.id) }); }
     if (action === 'cancelar') return await cancelar(user.id);
+    if (action === 'pix') return await pixCriar(user, body.nome);
+    if (action === 'pixstatus') return await pixStatus(user.id, body.id);
     if (action === 'ai') return await ai(user.id, body.prompt, body.system, body.modelo);
     if (action === 'subscribe') return await subscribe(user.id, body.subscription, req.headers.get('user-agent') || '');
     if (action === 'test') return await testPush(user.id);
@@ -444,6 +509,11 @@ Deno.serve(async (req) => {
       if (mpToken()) {
         const [a] = (await rest(`assinaturas?user_id=eq.${user.id}&select=conferido_em,status`).catch(() => [])) || [];
         if (a && Date.now() - Date.parse(a.conferido_em || 0) > (a.status === 'pending' ? 10 * 60e3 : 6 * 3600e3)) await sincroniza(user.id).catch((e) => console.error('sync', e));
+      }
+      // Pix aberto nas últimas 24 h: confere se caiu (caso o app tenha sido fechado antes de confirmar)
+      if (mpToken()) {
+        const pend = (await rest(`pix_pagamentos?user_id=eq.${user.id}&status=eq.pending&criado_em=gte.${new Date(Date.now() - 864e5).toISOString()}&select=mp_id&limit=3`).catch(() => [])) || [];
+        for (const p of pend) await mp(`/v1/payments/${p.mp_id}`).then(pixAplica).catch((e) => console.error('pix', e));
       }
       const plano = await planoUser(user.id);
       // trialOver fica para versões antigas do app (elas pausam a IA); a nova usa o plano

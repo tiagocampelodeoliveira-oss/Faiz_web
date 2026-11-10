@@ -51,3 +51,22 @@ export function lerAssinatura(pre: any): Assinatura & { mp_id: string; pagas: nu
   const valor = typeof pre?.auto_recurring?.transaction_amount === 'number' ? Math.round(pre.auto_recurring.transaction_amount * 100) : null;
   return { mp_id: String(pre?.id || ''), status, proximo: status === 'authorized' ? proximo : null, ate, pagas, valor };
 }
+
+/** Pix de 1 mês: cobrança avulsa, vale por 30 minutos. O Mercado Pago devolve o QR code e o copia-e-cola. */
+export function corpoPix(o: { userId: string; email: string; preco: number; aviso: string; agora: Date }) {
+  return {
+    transaction_amount: Math.round(o.preco) / 100,
+    description: 'Faiz Plus (1 mês)',
+    payment_method_id: 'pix',
+    external_reference: o.userId,
+    notification_url: o.aviso,
+    date_of_expiration: new Date(o.agora.getTime() + 30 * 60e3).toISOString().replace('Z', '+00:00'),
+    payer: { email: o.email },
+  };
+}
+
+/** Novo "pago até": 30 dias a partir de hoje ou do fim do que já estava pago (o que for mais tarde). */
+export function somaPix(hoje: string, jaPago: (string | null | undefined)[], dias: number): string {
+  const base = [hoje, ...jaPago.filter((d): d is string => !!d && d > hoje)].sort().pop()!;
+  return new Date(Date.parse(base + 'T12:00:00Z') + dias * 864e5).toISOString().slice(0, 10);
+}
