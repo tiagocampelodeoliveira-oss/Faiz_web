@@ -63,6 +63,7 @@ if (token) {
     const r = await fetch(`${fn}/api`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'gtoken' }) });
     const b = await r.json().catch(() => ({}));
     console.log(`${cfg.body?.google === true && b?.error === 'google_none' ? '::notice::OK ' : '::warning::AVISO '} integrações com o Google — config.google=${cfg.body?.google} gtoken=${r.status} ${b?.error || ''}`);
+    console.log(`${cfg.body?.googleRedirect === 'https://faizapp.com.br/google' && /apps\.googleusercontent\.com$/.test(cfg.body?.googleId || '') ? '::notice::OK ' : '::warning::AVISO '} caminho próprio do Google — volta=${cfg.body?.googleRedirect || '(desligado)'}`);
   }
   {
     // calendário assinado foi retirado em 5/11: não cria link novo

@@ -64,6 +64,8 @@ if (process.env.AZURE_SPEECH_KEY) secrets.push({ name: 'FAIZ_AZURE_SPEECH_KEY', 
 if (process.env.AZURE_SPEECH_REGION) secrets.push({ name: 'FAIZ_AZURE_SPEECH_REGION', value: process.env.AZURE_SPEECH_REGION.trim().toLowerCase() });
 if (process.env.GOOGLE_CLIENT_ID) secrets.push({ name: 'FAIZ_GOOGLE_ID', value: process.env.GOOGLE_CLIENT_ID.trim() });
 if (process.env.GOOGLE_CLIENT_SECRET) secrets.push({ name: 'FAIZ_GOOGLE_SECRET', value: process.env.GOOGLE_CLIENT_SECRET.trim() });
+// Integrações do Google pelo caminho próprio (volta pela página do domínio do Faiz, que o Google consegue verificar). Desde 11/11.
+secrets.push({ name: 'FAIZ_GOOGLE_REDIRECT', value: 'https://faizapp.com.br/google' });
 // Mercado Pago (assinatura do Plus). Confere a chave sem mostrar dados da conta.
 const mpTok = (process.env.MP_ACCESS_TOKEN || '').trim();
 if (mpTok) {
