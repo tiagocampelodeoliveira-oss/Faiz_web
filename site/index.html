@@ -510,7 +510,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-10 14:33';
+const APP_VERSION = '2026-11-10 21:07';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -797,10 +797,11 @@ async function updatePushState() { U.pushState = await Push.state(); render(true
 /* Configuração pública: chave dos avisos, WhatsApp das opiniões, IA ligada. */
 (async () => {
   if (!Cloud.on) { U.aiState = 'off'; render(true); return; }
-  try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; U.aiCredit = c.aiCredit !== false; U.ttsOk = c.tts === true; U.googleOk = c.google === true; }
+  try { const c = await Cloud.fn('config', {}, false); vapidKey = c.vapidPublicKey || ''; waNumber = c.whatsapp || ''; U.aiState = c.ai ? 'ready' : 'off'; U.aiCredit = c.aiCredit !== false; U.ttsOk = c.tts === true; U.googleOk = c.google === true; U.gId = c.googleId || ''; U.gRedirect = c.googleRedirect || ''; }
   catch (e) { U.aiState = 'off'; }
   const oa = await Cloud.oauthReturn().catch((e) => ({ error: String(e?.message || e) }));
   if (oa) await googleVoltou(oa);
+  await googleCodigoVoltou();
   if (await Cloud.pull()) { syncRoutines(); render(); } else render(true);
   await acoesDoAviso();
   if (S.onboarded && integ('agenda')) agendaSync();
@@ -831,14 +832,43 @@ async function googleVoltou(oa) {
     if (!oa.refresh) { save(); setTimeout(() => toast('O Google não liberou o acesso. Tente ligar de novo em Mais.'), 400); return; }
     try { await Cloud.fn('gsave', { refresh_token: oa.refresh, scopes: oa.scopes || Object.keys(GSCOPES).filter((x) => x === integ || S.integ?.[x]).map((x) => GSCOPES[x]).join(' ') }); }
     catch (e) { U.lastError = 'gsave: ' + (e?.message || e); setTimeout(() => toast('Não consegui guardar o acesso ao Google. Tente de novo.'), 400); return; }
+    integLigada(integ);
+    return;
+  }
+  await googleContaVoltou(oa);
+}
+/** Integração ligada (pelos dois caminhos): marca, avisa e já sincroniza. */
+function integLigada(integ) {
     S.integ = { ...(S.integ || {}), [integ]: true };
     S.stats.integ = { ...(S.stats.integ || {}), [integ]: true };
     save();
     const nomes = { tarefas: 'Google Tarefas ligado! Já vou trazer suas tarefas ✅', agenda: 'Google Agenda ligado! Já vou trazer seus compromissos 📅', contatos: 'Contatos ligados! Agora eu ofereço avisar as pessoas pelo WhatsApp 💬', gmail: 'Gmail ligado! Vou procurar suas contas e boletos 🧾' };
     setTimeout(() => toast(nomes[integ] || 'Pronto!'), 400);
     setTimeout(() => { if (integ === 'agenda') agendaSync(true); if (integ === 'tarefas') tarefasSync(true); if (integ === 'gmail') { U.tab = 'contas'; render(); gmailScan(true); } }, 800);
-    return;
-  }
+}
+/* Caminho próprio das integrações (para a verificação do Google): o Google volta para a página do Faiz no domínio próprio
+   (faizapp.com.br/google), que repassa o código para cá como ?gcode=&gstate=. O servidor troca o código pela chave. */
+const GSTATE_KEY = 'faiz:gstate';
+function googleIntegUrl(k, sc) {
+  const st = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+  try { localStorage.setItem(GSTATE_KEY, JSON.stringify({ st, k, em: Date.now() })); } catch (e) {}
+  const q = new URLSearchParams({ client_id: U.gId, redirect_uri: U.gRedirect, response_type: 'code', scope: sc, access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true', state: st });
+  if (S.account?.email) q.set('login_hint', S.account.email);
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + q;
+}
+async function googleCodigoVoltou() {
+  const u = new URL(location.href), code = u.searchParams.get('gcode'), st = u.searchParams.get('gstate'), err = u.searchParams.get('gerror');
+  if (!code && !err) return;
+  ['gcode', 'gstate', 'gerror'].forEach((x) => u.searchParams.delete(x));
+  try { history.replaceState(null, '', u.pathname + (u.search || '')); } catch (e) {}
+  let salvo = null; try { salvo = JSON.parse(localStorage.getItem(GSTATE_KEY) || 'null'); localStorage.removeItem(GSTATE_KEY); } catch (e) {}
+  if (err) { if (!/access_denied/.test(err)) setTimeout(() => toast('O Google não liberou o acesso. Tente ligar de novo em Mais.'), 400); return; }
+  if (!salvo || salvo.st !== st || Date.now() - salvo.em > 30 * 60e3) { U.lastError = 'gstate'; setTimeout(() => toast('Esse pedido ao Google expirou. Tente ligar de novo em Mais.'), 400); return; }
+  try { await Cloud.fn('gcode', { code }); }
+  catch (e) { U.lastError = 'gcode: ' + (e?.code || e?.message || e); setTimeout(() => toast('Não consegui guardar o acesso ao Google. Tente de novo.'), 400); return; }
+  integLigada(salvo.k);
+}
+async function googleContaVoltou(oa) {
   if (oa.flow === 'login' || oa.mudouDeConta) {
     // outro celular (ou depois de apagar): traz os dados da conta; se ela ainda não tem nada, fica com os deste celular
     const veio = await Cloud.pull(true);
@@ -887,6 +917,7 @@ function ligarGoogle(k) {
       closeSheet();
       const sc = [...new Set(Object.keys(GSCOPES).filter((x) => x === k || integ(x)).map((x) => GSCOPES[x]))].join(' ');
       if (S.updatedAt) { clearTimeout(saveT); persistLocal(); await Cloud.push(); }
+      if (U.gRedirect && U.gId) { S.stats.gCaminho = 'proprio'; save(); location.href = googleIntegUrl(k, sc); return; }
       try { await Cloud.google('scopes:' + k, sc); }
       catch (e) { U.lastError = 'google: ' + (e?.message || e); toast('Não consegui abrir o Google agora. Tente de novo.'); }
     };

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Faiz · voltando para o app</title>
+<style>body{font-family:system-ui,-apple-system,sans-serif;background:#F4F3FF;color:#0E2240;display:grid;place-items:center;min-height:100vh;margin:0;text-align:center;padding:24px}a{color:#4453C8}</style>
+</head><body>
+<p>Voltando para o Faiz...</p>
+<p><a id="link" href="https://tiagocampelodeoliveira-oss.github.io/Faiz_web/">Toque aqui se não voltar sozinho</a></p>
+<script>
+// Página de volta do Google nas integrações (Agenda, Tarefas, Contatos): repassa o código para o app, que troca pela chave no servidor.
+(function () {
+  var APP = 'https://tiagocampelodeoliveira-oss.github.io/Faiz_web/';
+  var q = new URLSearchParams(location.search), out = new URLSearchParams();
+  if (q.get('code')) out.set('gcode', q.get('code'));
+  if (q.get('state')) out.set('gstate', q.get('state'));
+  if (q.get('error')) out.set('gerror', q.get('error'));
+  var url = APP + (out.toString() ? '?' + out : '');
+  document.getElementById('link').href = url;
+  location.replace(url);
+})();
+</script>
+</body></html>

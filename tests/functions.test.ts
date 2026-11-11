@@ -81,6 +81,11 @@ globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
   if (url.host === 'oauth2.googleapis.com') {
     const b = new URLSearchParams(String(init.body));
     if (b.get('refresh_token') === 'revogado') return Response.json({ error: 'invalid_grant' }, { status: 400 });
+    if (b.get('grant_type') === 'authorization_code') {
+      if (b.get('redirect_uri') !== 'https://faizapp.com.br/google' || b.get('client_secret') !== 'segredo') return Response.json({ error: 'redirect_uri_mismatch' }, { status: 400 });
+      if (b.get('code') === 'codigo-ruim-123') return Response.json({ error: 'invalid_grant' }, { status: 400 });
+      return Response.json({ access_token: 'ya29.novo', refresh_token: b.get('code') === 'sem-refresh-123' ? undefined : '1//novorefresh', scope: 'https://www.googleapis.com/auth/calendar.events.readonly' });
+    }
     return Response.json({ access_token: 'ya29.temp', expires_in: 3599, scope: 'https://www.googleapis.com/auth/calendar.events' });
   }
   if (url.host === 'photon.komoot.io') { photonUrl = String(input); return Response.json({ features: photonFeatures }); }
@@ -631,4 +636,27 @@ test('cobrança ligada: a tela de planos é obrigatória para quem já testava a
   assert.equal(p.plano, 'teste'); assert.equal(p.precisaEscolher, false); assert.equal(p.cobranca, true); assert.equal(p.fimTeste, '2026-11-17');
   p = planoDe({ ...novo, now: new Date('2026-11-18T15:00:00Z') });
   assert.equal(p.plano, 'gratis'); assert.equal(p.precisaEscolher, true);
+});
+
+test('api: integrações do Google pelo caminho próprio (código → chave de renovação no servidor)', async () => {
+  const auth = { Authorization: 'Bearer user-token', apikey: 'anon' };
+  const antes = { google_tokens: db.google_tokens, unlimited: db.unlimited };
+  env.FAIZ_GOOGLE_ID = 'id.apps.googleusercontent.com'; env.FAIZ_GOOGLE_SECRET = 'segredo';
+  db.unlimited = [{ user_id: U }]; db.google_tokens = [];
+  try {
+    let cfg = await (await post(api, { action: 'config' })).json();
+    assert.equal(cfg.googleRedirect, '', 'sem o endereço de volta configurado, o app usa o caminho antigo'); assert.equal(cfg.googleId, '');
+    assert.equal((await post(api, { action: 'gcode', code: 'abcdefghijkl' }, auth)).status, 503);
+    env.FAIZ_GOOGLE_REDIRECT = 'https://faizapp.com.br/google';
+    cfg = await (await post(api, { action: 'config' })).json();
+    assert.equal(cfg.googleRedirect, 'https://faizapp.com.br/google'); assert.equal(cfg.googleId, 'id.apps.googleusercontent.com');
+    const ok = await (await post(api, { action: 'gcode', code: 'codigo-bom-123' }, auth)).json();
+    assert.equal(ok.ok, true);
+    assert.equal(db.google_tokens.at(-1).refresh_token, '1//novorefresh');
+    const ruim = await post(api, { action: 'gcode', code: 'codigo-ruim-123' }, auth);
+    assert.equal(ruim.status, 400);
+    db.google_tokens = [{ refresh_token: '1//antigo' }];
+    const sem = await (await post(api, { action: 'gcode', code: 'sem-refresh-123' }, auth)).json();
+    assert.equal(sem.ok, true, 'sem chave nova: continua valendo a antiga');
+  } finally { delete env.FAIZ_GOOGLE_REDIRECT; Object.assign(db, antes); }
 });

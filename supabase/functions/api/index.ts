@@ -234,6 +234,25 @@ async function googleSave(userId: string, refresh: unknown, scopes: unknown): Pr
   await rest('google_tokens?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: userId, refresh_token: refresh, scopes: String(scopes || '').slice(0, 500), updated_at: new Date().toISOString() }) });
   return json({ ok: true });
 }
+/** Endereço de volta do Google nas integrações (página no domínio do Faiz, verificado pelo Google). Sem ele, o app usa o caminho antigo (pelo Supabase). */
+const GOOGLE_REDIRECT = () => (Deno.env.get('FAIZ_GOOGLE_REDIRECT') || '').trim();
+/** Integrações pelo caminho próprio: o app manda o código que o Google devolveu; o servidor troca pela chave de renovação (com o segredo) e guarda. */
+async function googleCode(userId: string, code: unknown): Promise<Response> {
+  if (!GOOGLE_ID() || !GOOGLE_SECRET() || !GOOGLE_REDIRECT()) return json({ error: 'google_off' }, 503);
+  if (typeof code !== 'string' || code.length < 10 || code.length > 600) return json({ error: 'bad_request' }, 400);
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: GOOGLE_ID(), client_secret: GOOGLE_SECRET(), code, redirect_uri: GOOGLE_REDIRECT(), grant_type: 'authorization_code' }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return json({ error: 'google_code', detail: String(j.error || r.status).slice(0, 60) }, 400);
+  if (!j.refresh_token) {
+    // o Google só manda a chave de renovação na primeira vez; se já havia uma, ela continua valendo e ganha os escopos novos
+    const row = (await rest(`google_tokens?user_id=eq.${userId}&select=refresh_token`))?.[0];
+    if (!row) return json({ error: 'google_no_refresh' }, 400);
+    await rest(`google_tokens?user_id=eq.${userId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ scopes: String(j.scope || '').slice(0, 500), updated_at: new Date().toISOString() }) });
+    return json({ ok: true, scopes: j.scope || '' });
+  }
+  await googleSave(userId, j.refresh_token, j.scope);
+  return json({ ok: true, scopes: j.scope || '' });
+}
 async function googleToken(userId: string): Promise<Response> {
   if (!GOOGLE_ID() || !GOOGLE_SECRET()) return json({ error: 'google_off' }, 503);
   const row = (await rest(`google_tokens?user_id=eq.${userId}&select=refresh_token,scopes`))?.[0];
@@ -457,7 +476,7 @@ Deno.serve(async (req) => {
   const action = String(body.action || '');
   try {
     if (action === 'config') {
-      return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY'), tts: ttsLigado(), google: !!(GOOGLE_ID() && GOOGLE_SECRET()), aiCredit: !(await aiCreditEmpty()) });
+      return json({ vapidPublicKey: vapid().keys.publicKey, whatsapp: Deno.env.get('FAIZ_WHATSAPP') || '', ai: !!Deno.env.get('FAIZ_ANTHROPIC_KEY'), tts: ttsLigado(), google: !!(GOOGLE_ID() && GOOGLE_SECRET()), googleId: GOOGLE_REDIRECT() ? GOOGLE_ID() : '', googleRedirect: GOOGLE_REDIRECT(), aiCredit: !(await aiCreditEmpty()) });
     }
     // botões do aviso (Feito / Adiar): sem login, vale a assinatura que foi junto no aviso
     if (action === 'pushact') return await pushAct(body);
@@ -491,6 +510,7 @@ Deno.serve(async (req) => {
       return json({ url, webcal: url.replace(/^https:/, 'webcal:') });
     }
     if (action === 'calstop') { await rest(`cal_feeds?user_id=eq.${user.id}`, { method: 'DELETE' }); return json({ ok: true }); }
+    if (action === 'gcode') { if ((await planoUser(user.id)).plano === 'gratis') return json({ error: 'plus_only' }, 403); return await googleCode(user.id, body.code); }
     if (action === 'gsave') return await googleSave(user.id, body.refresh_token, body.scopes);
     if (action === 'gtoken') { if ((await planoUser(user.id)).plano === 'gratis') return json({ error: 'plus_only' }, 403); return await googleToken(user.id); }
     if (action === 'gforget') { await rest(`google_tokens?user_id=eq.${user.id}`, { method: 'DELETE' }); return json({ ok: true }); }
