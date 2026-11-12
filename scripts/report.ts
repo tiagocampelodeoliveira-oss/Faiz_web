@@ -81,6 +81,8 @@ const pessoas = states
       edicoes: st.edits || 0,
       criadosDireto: st.direto || 0,
       abriuAvaliar: st.avaliar || 0,
+      // primeiro uso guiado (desde 11/11): até onde a pessoa chegou; só datas, nunca o que respondeu
+      primeiroUso: st.onb ? (st.onb.fim ? 'completo' : st.onb.rotina ? 'parou antes do Continuar' : st.onb.conta ? 'parou na rotina' : 'parou na conta Google') + (st.onb.destravou ? ` (pulou ${st.onb.destravou} pergunta(s) travada(s))` : '') : 'antes do primeiro uso guiado',
       tutorial: st.tutorial ? (st.tutorial.viu ? 'viu até o fim' : `pulou no passo ${st.tutorial.parouEm || '?'}`) : 'ainda não',
       botoesDoAviso: st.pushActs || 0,
       pesquisa3: d.survey?.d3 || null,

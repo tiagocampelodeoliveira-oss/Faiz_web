@@ -162,6 +162,9 @@ button{cursor:pointer}
 .typing i:nth-child(2){animation-delay:.15s;background:var(--peach)!important}
 .typing i:nth-child(3){animation-delay:.3s;background:var(--lilac)!important}
 @keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+.onbpasso{display:inline-block;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--navy,#0C2A48);background:rgba(255,255,255,.7);border-radius:999px;padding:5px 12px;margin-bottom:14px}
+body.onb .composer{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+body.onb .composer .btn{width:100%}
 .composer{position:fixed;left:50%;transform:translateX(-50%);width:100%;max-width:480px;bottom:calc(92px + env(safe-area-inset-bottom,0px));padding:0 max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));z-index:15}
 .sugs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
 .sugs::-webkit-scrollbar{display:none}
@@ -510,7 +513,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-11 10:54';
+const APP_VERSION = '2026-11-11 21:32';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -876,6 +879,7 @@ async function googleContaVoltou(oa) {
   }
   S.account = { google: true, email: oa.email, em: S.account?.em || new Date().toISOString() };
   S.stats.google = (S.stats.google || 0) + 1;
+  if (S.onb === 'conta') { S.onb = 'rotina'; onbRotina(); }
   save();
   setTimeout(() => toast(oa.flow === 'login' ? `Pronto! Entrei como ${oa.email} 💜` : `Conta salva com o Google (${oa.email}). Agora você não perde nada 💜`), 400);
 }
@@ -1690,6 +1694,7 @@ async function send(text, opt = {}) {
     U.scrollChat = true; render(true); return;
   }
   U.typing = true; U.scrollChat = true; render(true);
+  const etapaAntes = S.entrevista?.etapa;
   const ctx = { now: new Date(), tasks: S.tasks, fin: S.fin, integ: S.integ || {}, routines: S.routines, entrevista: entrevistaCtx(), recentUser: S.chat.filter((m) => m.who === 'me').slice(-4).map((m) => m.text).join(' ') };
   let reply, failed = false;
   if (Cloud.on && U.aiState !== 'off' && U.aiOn && !U.trialOver && !ehGratis()) {
@@ -1781,6 +1786,7 @@ async function send(text, opt = {}) {
     if (ult && S.chat.length > n0 && ult.who === 'bot' && links.length && !ult.links) { ult.links = links; save(); }
   }
   if (reply.entrevista && S.entrevista?.on) { if (reply.entrevista === 'parar') entrevistaPausa(); else entrevistaNext(); }
+  onbDestrava(etapaAntes, failed);
   U.scrollChat = true; render(true);
 }
 /** Mudança grande na rotina: apagar ou mudar uma rotina (todas as vezes), ou mexer em várias coisas/dias de uma vez.
@@ -1862,17 +1868,46 @@ function entrevistaAsk() {
   const t = ENTREVISTA[e.etapa];
   if (!t) return entrevistaFim();
   const tem = t.re ? S.routines.filter((r) => t.re.test(L.norm(r.title))) : [];
+  e.tent = 0;
   e.pergunta = tem.length ? `Vi que você já tem ${tem.map(rotinaTxt).join('; ')}. Tá certo assim?` : t.q;
   save();
   push({ who: 'bot', mood: 'principal', text: e.pergunta, sugs: tem.length ? ['Tá certo'] : t.sugs, dica: tem.length ? 'Ex.: é só de seg a sex, das 13h às 18h' : t.dica });
 }
 function entrevistaNext() { const e = S.entrevista; if (!e?.on) return; e.etapa++; S.stats.entrevista.etapas = Math.max(S.stats.entrevista.etapas || 0, e.etapa); entrevistaAsk(); }
-function entrevistaPausa() { if (S.entrevista) { S.entrevista.on = false; S.entrevista.pausa = true; save(); } }
+/* ---------- Primeiro uso guiado (gente nova, desde 11/11) ----------
+   S.onb: 'conta' (salvar com o Google, obrigatório) → 'rotina' (entrevista sem pular) → 'pronto' (botão Continuar) → apagado.
+   Quem já usava o app não tem S.onb e não passa por isso. */
+function onbRotina() {
+  S.stats.onb = { ...(S.stats.onb || {}), conta: S.stats.onb?.conta || new Date().toISOString() };
+  if (!S.entrevista?.on) entrevistaStart();
+  U.tab = 'faz'; U.scrollChat = true;
+}
+function onbFim() {
+  S.onb = null; S.stats.onb = { ...(S.stats.onb || {}), fim: new Date().toISOString() };
+  save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0);
+}
+/** Na entrevista obrigatória, ninguém fica preso: depois de 3 respostas no mesmo assunto (ou 2 com a IA falhando), segue. */
+function onbDestrava(etapaAntes, failed) {
+  const e = S.entrevista;
+  if (S.onb !== 'rotina' || !e?.on || e.etapa !== etapaAntes) return;
+  e.tent = (e.tent || 0) + 1;
+  if (e.tent >= 3 || (failed && e.tent >= 2)) {
+    S.stats.onb = { ...(S.stats.onb || {}), destravou: (S.stats.onb?.destravou || 0) + 1 };
+    push({ who: 'bot', mood: 'principal', text: 'Beleza, depois a gente ajusta isso com calma. Bora pro próximo!' });
+    entrevistaNext();
+  }
+}
+function entrevistaPausa() { if (S.onb === 'rotina') return entrevistaNext(); if (S.entrevista) { S.entrevista.on = false; S.entrevista.pausa = true; save(); } }
 function entrevistaFim() {
   S.entrevista = { on: false, fim: true, quando: Date.now() };
   S.stats.entrevista = { ...(S.stats.entrevista || {}), fim: (S.stats.entrevista?.fim || 0) + 1 };
   save();
   const rs = S.routines.slice().sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  if (S.onb === 'rotina') {
+    S.onb = 'pronto'; S.stats.onb = { ...(S.stats.onb || {}), rotina: new Date().toISOString() };
+    push({ who: 'bot', mood: 'comemorando', text: (rs.length ? `Pronto, sua semana base tá montada ✅\n${rs.map((r) => '• ' + rotinaTxt(r)).join('\n')}\nDepois é só me contar o que muda (uma consulta, uma prova, um rolê) que eu encaixo sem bater com nada disso.` : 'Fechou! Sem nada fixo por enquanto, então sua agenda tá livre pra montar do seu jeito.') + '\nAgora vou te mostrar rapidinho como o Faiz funciona 👇' });
+    return;
+  }
   push({ who: 'bot', mood: 'comemorando', text: rs.length
     ? `Pronto, sua semana base tá montada ✅\n${rs.map((r) => '• ' + rotinaTxt(r)).join('\n')}\nAgora me conta o que muda: uma consulta, uma prova, um rolê... que eu encaixo nos horários livres sem bater com nada disso.`
     : 'Fechou! Sem nada fixo por enquanto, então sua agenda tá livre pra montar do seu jeito. Me conta o que você tem pra fazer essa semana que eu organizo.',
@@ -2936,6 +2971,18 @@ const screens = {
       <button class="linkbtn" type="button" data-act="later">Agora não</button>
     </div></main>`;
   },
+  onbConta() {
+    const first = esc((S.name || '').split(' ')[0]);
+    return `<main class="screen bg-lav" style="padding-bottom:40px"><div class="welcome" style="padding-top:20px">
+      <div class="onbpasso">Passo 2 de 3</div>
+      ${irisImg('principal', 104)}
+      <h1 class="big" style="margin-top:18px">Prazer, ${first}! Bora salvar sua conta?</h1>
+      <p class="muted" style="margin:10px 0 22px">Com o Google, você não perde nada se trocar ou perder o celular. Eu só uso seu nome e seu e-mail, mais nada.</p>
+      <button class="btn" type="button" data-act="google-link">Continuar com Google</button>
+      <button class="linkbtn" type="button" data-act="google-login" style="margin-top:6px">Já usei o Faiz antes: entrar com Google</button>
+      <p class="meta" style="margin:14px 0 0">Depois disso, eu te faço umas perguntas rápidas sobre a sua rotina. <a href="privacidade.html" style="color:inherit">Política de privacidade</a></p>
+    </div></main>`;
+  },
   welcome() {
     return `<main class="screen bg-welcome"><div class="welcome">
       <img class="iris" src="iris/principal.webp" width="148" height="148" alt="Íris, a governanta do Faiz" style="box-shadow:0 14px 30px -14px rgba(12,42,72,.45)">
@@ -3037,7 +3084,8 @@ const screens = {
       return `<div class="botrow">${irisImg(m.mood || 'principal', 34)}<div class="msg bot">${esc(m.text)}${m.plan?.length ? `<div class="plan">${m.plan.map((p) => `<div><b>${L.fmtTime(p.start)}</b><i style="background:${COLORS[p.color] || 'var(--lilac)'}"></i><span>${esc(p.title)}</span>${p.isNew ? '<small>novo</small>' : ''}</div>`).join('')}</div>` : ''}${m.places?.length ? `<div class="places">${m.places.map((p) => `<div class="place"><span class="ico peach" style="width:34px;height:34px;border-radius:11px">${I.pin.replace('<svg', '<svg width="18" height="18"')}</span><div class="txt"><div class="n">${esc(p.nome)}</div><div class="d">${fmtDist(p.dist)}${p.endereco ? ' · ' + esc(p.endereco) : ''}</div></div><a class="pill" href="${esc(routeUrl(p))}" target="_blank" rel="noopener">Como chegar</a></div>`).join('')}</div>` : ''}${m.notes ? `<div class="note">${esc(m.notes)}</div>` : ''}${m.proposal?.status === 'adjusted' ? '<div class="note">Plano não aplicado.</div>' : ''}${acts.length ? `<div class="acts">${acts.join('')}</div>` : ''}</div></div>${qr}`;
     };
     return `<main class="screen bg-peach" style="padding-bottom:0">
-      <div class="head"><span>${irisImg('principal', 44)}</span><div style="text-align:center"><h1 class="screen-title">Íris</h1><div class="meta">sua governanta no Faiz</div></div><span></span></div>
+      ${S.onb ? '<div class="onbpasso" style="margin:14px auto 0">Passo 3 de 3 · Sua rotina</div>' : ''}
+      <div class="head"><span>${irisImg('principal', 44)}</span><div style="text-align:center"><h1 class="screen-title">Íris</h1><div class="meta">${S.onb ? 'me conta o que é fixo na sua semana' : 'sua governanta no Faiz'}</div></div><span></span></div>
       ${ehGratis() ? '<p class="ai-note">Plano Grátis: eu entendo frases diretas, tipo “corrida amanhã às 7”. <button class="textbtn" type="button" data-act="planos" style="font-size:12.5px;padding:0">Ver o Plus</button></p>' : U.trialOver ? '<p class="ai-note">Seu teste de 7 dias com a IA terminou. Agora eu entendo frases mais diretas.</p>' : U.aiState === 'off' ? '<p class="ai-note">Modo simples: a IA não está disponível agora, então entendo frases mais diretas.</p>' : ''}${U.pushState !== 'on' && U.pushState !== 'checking' ? `<p class="ai-note">Avisos desligados neste celular. <button class="textbtn" type="button" data-act="notify" style="font-size:12.5px;padding:0">Ativar</button></p>` : ''}
       <div class="chat" id="chat" style="padding-top:6px">
         <div class="botrow">${irisImg('principal', 34)}<div class="msg bot">${intro}</div></div>
@@ -3045,9 +3093,9 @@ const screens = {
         ${U.typing ? '<div class="typing"><span><i style="background:var(--blue)"></i> <i></i> <i></i></span>Analisando sua agenda...</div>' : ''}
       </div>
     </main>
-    <div class="composer">
-      <div class="sugs">${['Quero correr na quinta depois da academia e depois tenho um jantar', 'Gastei 50 no mercado', 'Academia toda seg, qua e sex às 7', 'Organize meu dia', 'Quanto gastei este mês?', 'Lembre-me de beber água às 15h', 'Padaria mais próxima de mim'].map((s) => `<button type="button" data-act="say" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div>
-      <form class="inputbox" id="chatForm"><input id="chatInput" type="text" enterkeyhint="send" autocomplete="off" placeholder="${U.listening ? 'Ouvindo...' : 'Escreva ou toque no microfone'}" aria-label="Mensagem para o Faiz" maxlength="500"><button type="button" class="mic ${U.listening ? 'on' : ''}" data-act="mic" aria-label="${U.listening ? 'Parar de ouvir' : 'Falar com o Faiz'}" aria-pressed="${U.listening}" ${U.typing ? 'disabled' : ''}>${I.mic}</button><button type="submit" aria-label="Enviar" ${U.typing ? 'disabled' : ''}>${I.send}</button></form>
+    <div class="composer">${S.onb === 'pronto' ? '<button class="btn" type="button" data-act="onb-fim">Continuar</button></div>' : `
+      ${S.onb ? '' : `<div class="sugs">${['Quero correr na quinta depois da academia e depois tenho um jantar', 'Gastei 50 no mercado', 'Academia toda seg, qua e sex às 7', 'Organize meu dia', 'Quanto gastei este mês?', 'Lembre-me de beber água às 15h', 'Padaria mais próxima de mim'].map((s) => `<button type="button" data-act="say" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div>`}
+      <form class="inputbox" id="chatForm"><input id="chatInput" type="text" enterkeyhint="send" autocomplete="off" placeholder="${U.listening ? 'Ouvindo...' : 'Escreva ou toque no microfone'}" aria-label="Mensagem para o Faiz" maxlength="500"><button type="button" class="mic ${U.listening ? 'on' : ''}" data-act="mic" aria-label="${U.listening ? 'Parar de ouvir' : 'Falar com o Faiz'}" aria-pressed="${U.listening}" ${U.typing ? 'disabled' : ''}>${I.mic}</button><button type="submit" aria-label="Enviar" ${U.typing ? 'disabled' : ''}>${I.send}</button></form>`}
     </div>`;
   },
   tarefas() {
@@ -3157,15 +3205,19 @@ function render(keep) {
   const tlY = document.getElementById('tlWrap')?.scrollTop;
   const pre = U.showInstall || (IS_IOS && !STANDALONE && !S.skipInstall && !S.onboarded) ? 'install'
     : !S.onboarded ? 'welcome'
+    : S.onb === 'conta' ? 'onbConta'
+    : S.onb ? ''
     : (!S.permAsked && canNotifyHere() && permission() === 'default') ? 'permit' : '';
-  if (pre) { $app.innerHTML = screens[pre](); return; }
-  $app.innerHTML = screens[U.tab]() + nav();
+  if (pre) { document.body.classList.remove('onb'); $app.innerHTML = screens[pre](); return; }
+  if (S.onb) U.tab = 'faz';
+  document.body.classList.toggle('onb', !!S.onb);
+  $app.innerHTML = screens[U.tab]() + (S.onb ? '' : nav());
   coachWatch();
   planosWatch();
   if (U.tab === 'faz') {
     const inp = document.getElementById('chatInput');
     if (draft) inp.value = draft;
-    document.getElementById('chatForm').addEventListener('submit', (e) => { e.preventDefault(); if (S.settings.speak) Voice.unlock(); const v = inp.value; inp.value = ''; send(v); });
+    document.getElementById('chatForm')?.addEventListener('submit', (e) => { e.preventDefault(); if (S.settings.speak) Voice.unlock(); const v = inp.value; inp.value = ''; send(v); });
     if (U.scrollChat) { U.scrollChat = false; requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight)); }
     else if (keep) window.scrollTo(0, y);
   } else if (keep) window.scrollTo(0, y);
@@ -3397,9 +3449,16 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]'); if (!el || !$app.contains(el)) return;
   const a = el.dataset.act, v = el.dataset.v, id = el.dataset.id;
   switch (a) {
-    case 'start': { const n = document.getElementById('nameInput').value.trim(); S.name = n; S.onboarded = true; S.startDate = today(); save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0);
+    case 'start': { const n = document.getElementById('nameInput').value.trim();
+      if (!n) { toast('Me fala seu nome primeiro 😊'); document.getElementById('nameInput').focus(); break; }
+      S.name = n; S.onboarded = true; S.startDate = today();
+      // primeiro uso guiado (11/11, ideia do Tiago): nome → conta Google (obrigatória) → rotina com a Íris (sem pular) → avisos → tutorial
+      S.onb = S.account?.google ? 'rotina' : 'conta'; S.stats.onb = { nome: new Date().toISOString() };
+      if (S.onb === 'rotina') onbRotina();
+      save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0);
       // gente nova: grava a conta no servidor e já busca o plano (a tela de planos é a primeira coisa que aparece)
       clearTimeout(saveT); persistLocal(); Cloud.push().catch(() => {}).finally(() => planoAtualiza().finally(() => { U.meFeito = true; render(true); })); break; }
+    case 'onb-fim': onbFim(); break;
     case 'skipinstall': S.skipInstall = true; U.showInstall = false; save(); render(); window.scrollTo(0, 0); break;
     case 'showinstall': U.showInstall = true; render(); window.scrollTo(0, 0); break;
     case 'permit': case 'notify': enableNotify(a === 'permit'); break;
