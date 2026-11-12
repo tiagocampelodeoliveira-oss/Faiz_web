@@ -228,3 +228,9 @@ alter table public.contas_teste enable row level security;
 insert into public.contas_teste (user_id, nome)
   select user_id, data->>'name' from public.states where lower(trim(data->>'name')) like 'tiago teste%'
   on conflict (user_id) do nothing;
+-- 12/11: conta "Tiago" aberta pelo Tiago no navegador anônimo do computador em 11/11 (também é dele)
+insert into public.contas_teste (user_id, nome)
+  select user_id, data->>'name' from public.states
+  where lower(trim(data->>'name')) = 'tiago' and data->>'startDate' = '2026-11-11'
+    and user_id not in (select user_id from public.owners)
+  on conflict (user_id) do nothing;
