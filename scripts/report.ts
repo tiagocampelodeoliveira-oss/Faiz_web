@@ -11,6 +11,8 @@ const get = async (path: string) => (await fetch(`https://${REF}.supabase.co/res
 
 const states: { user_id: string; data: any; updated_at: string }[] = await get('states?select=user_id,data,updated_at');
 const owners = new Set(((await get('owners?select=user_id')) as any[]).map((o) => o.user_id));
+// contas de teste do dono ("Tiago teste") contam como dele, fora das médias
+for (const c of (await get('contas_teste?select=user_id')) as any[]) owners.add(c.user_id);
 const pushLog: any[] = await get(`push_log?select=user_id,at,kind,status,ok,gone&at=gte.${new Date(Date.now() - 14 * 864e5).toISOString()}&order=at.desc&limit=5000`);
 const livres = new Set(((await get('unlimited?select=user_id')) as any[]).map((o) => o.user_id));
 const aiLog: any[] = await get(`ai_log?select=at,status,stop,ms,out_tokens,model&at=gte.${new Date(Date.now() - 14 * 864e5).toISOString()}&order=at.desc&limit=5000`);

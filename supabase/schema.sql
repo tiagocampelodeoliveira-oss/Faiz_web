@@ -217,3 +217,14 @@ alter table public.pagar_teste enable row level security;
 insert into public.pagar_teste (user_id, nome)
   select user_id, data->>'name' from public.states where lower(split_part(trim(data->>'name'), ' ', 1)) = 'amanda'
   on conflict (user_id) do nothing;
+
+-- Contas de teste do dono (12/11, pedido do Tiago): contam como dono no relatório, mas não recebem os alertas de dono.
+create table if not exists public.contas_teste (
+  user_id uuid primary key references auth.users on delete cascade,
+  nome text,
+  criado_em timestamptz not null default now()
+);
+alter table public.contas_teste enable row level security;
+insert into public.contas_teste (user_id, nome)
+  select user_id, data->>'name' from public.states where lower(trim(data->>'name')) like 'tiago teste%'
+  on conflict (user_id) do nothing;
