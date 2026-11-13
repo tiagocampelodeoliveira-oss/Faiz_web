@@ -9,7 +9,7 @@ export type Task = {
   date: string; // AAAA-MM-DD, horário local da pessoa
   start?: number; // minutos desde 00:00
   end?: number;
-  status?: string; // 'pendente' | 'andamento' | 'feito'
+  status?: string; // 'pendente' | 'andamento' | 'feito' | 'naofeito'
   tag?: string; // 'Lembrete' = avisar na hora exata
 };
 
@@ -82,6 +82,9 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
  * Quantas vezes seguidas (as últimas, antes de hoje) a pessoa deixou de fazer esta atividade.
  * Conta as vezes em que ela estava na agenda (rotina de seg/qua/sex conta 3 furos em uma semana), até 30 dias atrás.
  */
+/** Ainda em aberto: nem feita, nem marcada como "não fiz" (a pessoa marcou: não cobra mais). */
+export const aberta = (t: Task) => !!t && t.status !== 'feito' && t.status !== 'naofeito';
+
 export function missedStreak(tasks: Task[], title: string, date: string): number {
   const n = norm(title);
   const byDay = new Map<string, boolean>();
@@ -94,13 +97,16 @@ export function missedStreak(tasks: Task[], title: string, date: string): number
 /** Vezes seguidas que a pessoa cumpriu esta atividade (dias sem ela não contam; hoje ainda não feito não quebra). */
 export function doneStreak(tasks: Task[], title: string, date: string): number {
   const n = norm(title);
-  const byDay = new Map<string, boolean>();
-  for (const t of tasks) if (t && !isGoogle(t) && t.date <= date && norm(t.title) === n) byDay.set(t.date, (byDay.get(t.date) ?? false) || t.status === 'feito');
+  const byDay = new Map<string, boolean>(), nao = new Set<string>();
+  for (const t of tasks) if (t && !isGoogle(t) && t.date <= date && norm(t.title) === n) {
+    byDay.set(t.date, (byDay.get(t.date) ?? false) || t.status === 'feito');
+    if (t.status === 'naofeito') nao.add(t.date);
+  }
   let k = 0, last = date;
   for (const d of [...byDay.keys()].sort().reverse()) {
     if ((Date.parse(last) - Date.parse(d)) / 864e5 > 8) break;
     if (byDay.get(d)) k++;
-    else if (d !== date) break;
+    else if (d !== date || nao.has(d)) break; // hoje só quebra com "não fiz"
     last = d;
   }
   return k;
@@ -181,7 +187,7 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   const { date, min } = localNow(now, tz);
   const lead = Math.max(0, Math.min(120, Number.isFinite(ns.lead as number) ? (ns.lead as number) : 10));
   const today = (state.tasks ?? []).filter((t) => t && t.date === date).sort(byTime);
-  const open = today.filter((t) => t.status !== 'feito');
+  const open = today.filter(aberta);
   const all = state.tasks ?? [];
   const out: Notice[] = [];
   const add = (n: Notice) => { if (!sent.has(n.key)) out.push(n); };
@@ -234,7 +240,7 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   // 1b. Véspera, às 20:00: o que começa cedo amanhã (antes das 10h).
   const tomorrow = daysBefore(date, -1);
   if (on('vespera') && min >= 20 * 60 && min < 21 * 60) {
-    const cedo = all.filter((t) => t && !isGoogle(t) && t.date === tomorrow && t.status !== 'feito' && t.start != null && t.start < 600 && t.tag !== 'Lembrete').sort(byTime);
+    const cedo = all.filter((t) => t && !isGoogle(t) && t.date === tomorrow && aberta(t) && t.start != null && t.start < 600 && t.tag !== 'Lembrete').sort(byTime);
     if (cedo.length) {
       const v = pick(tomorrow);
       const lista = joinPt(cedo.slice(0, 3).map((t) => `${lcFirst(t.title)} às ${fmt(t.start!)}`));
@@ -290,7 +296,7 @@ export function dueNotices(state: AppState, now: Date, sent: Set<string>): Notic
   const dow = new Date(date + 'T12:00:00Z').getUTCDay();
   if (on('semana') && dow === 0 && min >= 19 * 60 && min < 20 * 60 && all.length) {
     const fim = daysBefore(date, -7);
-    const n = all.filter((t) => t && t.date > date && t.date <= fim && t.status !== 'feito').length;
+    const n = all.filter((t) => t && t.date > date && t.date <= fim && aberta(t)).length;
     add({ key: `w:${date}`, title: IRIS.semana.at(pick(date))!, body: IRIS.semanaCorpo(n), url: './?v=planejar', tag: 'semana' });
   }
   // 4c. Volta (8/11, pedido do Tiago; substitui o "sumiu" de 2 e 5 dias): 3 dias ou mais sem abrir o Faiz,

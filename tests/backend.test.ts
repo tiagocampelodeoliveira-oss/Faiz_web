@@ -404,3 +404,19 @@ test('avisos de atividade do Faiz levam a atividade (botões Feito e Adiar)', ()
   const manha = dueNotices(st, at('2026-11-10', '07:31'), new Set()).filter((n) => n.tag === 'manha');
   assert.ok(manha.every((n) => !n.task), 'resumo da manhã não tem botões');
 });
+
+test('"não fiz": não cobra mais e a sequência recomeça', async () => {
+  const { doneStreak } = await import('../supabase/functions/_shared/plan.ts');
+  const tasks = [
+    { id: 'a1', title: 'Academia', date: '2026-11-08', start: 18 * 60, end: 19 * 60, status: 'feito' },
+    { id: 'a2', title: 'Academia', date: '2026-11-09', start: 18 * 60, end: 19 * 60, status: 'feito' },
+    { id: 'a3', title: 'Academia', date: '2026-11-10', start: 18 * 60, end: 19 * 60, status: 'pendente' },
+  ];
+  const st = { settings: { tz: SP }, tasks } as any;
+  assert.equal(doneStreak(tasks as any, 'Academia', '2026-11-10'), 2);
+  assert.ok(dueNotices(st, at('2026-11-10', '18:05'), new Set()).some((n) => n.tag === 't-a3'), 'aberta: cobra na hora');
+  tasks[2].status = 'naofeito';
+  assert.equal(doneStreak(tasks as any, 'Academia', '2026-11-10'), 0);
+  for (const h of ['17:55', '18:05', '19:05']) assert.equal(dueNotices(st, at('2026-11-10', h), new Set()).filter((n) => n.tag === 't-a3').length, 0, `sem aviso às ${h}`);
+  assert.equal(missedStreak([...tasks, { id: 'a4', title: 'Academia', date: '2026-11-11', status: 'pendente' }] as any, 'Academia', '2026-11-11'), 1, 'conta como furo');
+});

@@ -81,6 +81,7 @@ const pessoas = states
       assinatura: assin.get(s.user_id) ? { status: assin.get(s.user_id).status, mensalidadesPagas: assin.get(s.user_id).pagas, proxima: assin.get(s.user_id).proximo, ate: assin.get(s.user_id).ate } : null,
       iaPorModelo: st.iaModelo || {},
       edicoes: st.edits || 0,
+      marcouNaoFiz: st.naoFiz || 0,
       criadosDireto: st.direto || 0,
       abriuAvaliar: st.avaliar || 0,
       // primeiro uso guiado (desde 11/11): até onde a pessoa chegou; só datas, nunca o que respondeu
