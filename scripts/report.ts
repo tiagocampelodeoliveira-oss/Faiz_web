@@ -82,6 +82,7 @@ const pessoas = states
       iaPorModelo: st.iaModelo || {},
       edicoes: st.edits || 0,
       marcouNaoFiz: st.naoFiz || 0,
+      abriuMeuRitmo: st.ritmo || 0,
       criadosDireto: st.direto || 0,
       abriuAvaliar: st.avaliar || 0,
       // primeiro uso guiado (desde 11/11): até onde a pessoa chegou; só datas, nunca o que respondeu
