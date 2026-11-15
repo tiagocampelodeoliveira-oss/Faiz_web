@@ -24,4 +24,4 @@ jobs:
       - name: Frases reais com a Íris (não publica nada)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: npx -y tsx scripts/preview.ts
+        run: npx -y tsx scripts/preview-anexo.ts
