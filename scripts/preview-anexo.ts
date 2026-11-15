@@ -19,10 +19,8 @@ const box: any = {}; vm.runInNewContext(logicSrc + ';this.L = FazLogic;', box);
 const L = box.L;
 
 const casos = [
-  { arq: 'scripts/anexos/conta-luz.jpg', mt: 'image/jpeg', tipo: 'foto', nome: 'conta-luz.jpg', frase: '' },
-  { arq: 'scripts/anexos/conta-luz.jpg', mt: 'image/jpeg', tipo: 'foto', nome: 'conta-luz.jpg', frase: 'anota pra mim' },
-  { arq: 'scripts/anexos/horario.pdf', mt: 'application/pdf', tipo: 'pdf', nome: 'horario.pdf', frase: 'esse é meu horário da faculdade, monta pra mim' },
-  { arq: 'scripts/anexos/horario.pdf', mt: 'application/pdf', tipo: 'pdf', nome: 'horario.pdf', frase: '' },
+  { arq: 'scripts/anexos/calendario-2027.pdf', mt: 'application/pdf', tipo: 'pdf', nome: 'calendario-2027.pdf', frase: '' },
+  { arq: 'scripts/anexos/calendario-2027.pdf', mt: 'application/pdf', tipo: 'pdf', nome: 'calendario-2027.pdf', frase: 'esse é o calendário da minha faculdade, coloca as provas e entregas na agenda' },
 ];
 const linhas: string[] = [];
 for (const c of casos) {
@@ -40,9 +38,10 @@ for (const c of casos) {
     const cmd = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1));
     const rep = L.aiToReply(cmd, pedido, ctx);
     const fin = (rep.fin || []).map((o: any) => o.fixa ? `conta ${o.fixa.nome} ${o.fixa.valor / 100} dia ${o.fixa.dia} ${o.fixa.desde}→${o.fixa.ate || '∞'}` : o.mov ? `${o.mov.tipo} ${o.mov.desc} ${o.mov.valor / 100} ${o.mov.data}` : o.type).join('; ');
+    const ops = (rep.ops || []).filter((o: any) => o.type === 'add').map((o: any) => `${o.task.date} ${o.task.title}`).join('; ');
     const rot = (rep.routines || []).map((x: any) => `${x.title} ${L.diasLabel(x.dias)} ${L.timeRange(x.start, x.end)}`).join('; ');
     const tipos = (cmd.acao === 'varios' ? (cmd.comandos || []) : [cmd]).map((x: any) => x.acao).join('+');
-    texto = `[${tipos}] ${rep.text} ${fin ? `{contas: ${fin}}` : ''} ${rot ? `{rotinas: ${rot}}` : ''} ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} (${((Date.now() - t0) / 1000).toFixed(1)} s, ${body.model}, entrada ${body.cache?.input || 0} tokens)`;
+    texto = `[${tipos}] ${rep.text} ${fin ? `{contas: ${fin}}` : ''} ${rot ? `{rotinas: ${rot}}` : ''} ${ops ? `{agenda (${(rep.ops || []).length}): ${ops}}` : ''} [stop ${body.stop}, saída ${String(body.text || '').length} car.] ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} (${((Date.now() - t0) / 1000).toFixed(1)} s, ${body.model}, entrada ${body.cache?.input || 0} tokens)`;
   } catch (e) { texto = `(falhou) ${String(e).slice(0, 300)} ${String(body.text || '').slice(0, 200)}`; }
   linhas.push(`${c.nome} + "${c.frase}" → ${texto.replace(/\n/g, ' / ')}`);
 }
