@@ -83,6 +83,8 @@ const pessoas = states
       edicoes: st.edits || 0,
       marcouNaoFiz: st.naoFiz || 0,
       abriuMeuRitmo: st.ritmo || 0,
+      // fotos e documentos mandados à Íris (só a quantidade, nunca o arquivo)
+      anexos: st.anexos || { foto: 0, pdf: 0 },
       criadosDireto: st.direto || 0,
       abriuAvaliar: st.avaliar || 0,
       // primeiro uso guiado (desde 11/11): até onde a pessoa chegou; só datas, nunca o que respondeu

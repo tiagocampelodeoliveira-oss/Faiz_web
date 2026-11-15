@@ -7,6 +7,7 @@ import { localNow, PIX_DIAS, planoDe, type PlanoInfo } from '../_shared/plan.ts'
 import { corpoAssinatura, corpoPix, lerAssinatura, mp, mpToken, somaPix } from '../_shared/mp.ts';
 import { aplicarAcao, confere, segredoAcoes } from '../_shared/acoes.ts';
 import { buildIcs } from '../_shared/ics.ts';
+import { anexoBloco } from '../_shared/anexo.ts';
 
 const AI_DAILY_LIMIT = 40;
 const MODEL = Deno.env.get('FAIZ_AI_MODEL') || 'claude-sonnet-5-5';
@@ -175,8 +176,11 @@ async function escolher(userId: string, plano: unknown, nome: unknown): Promise<
   return json({ plano: await planoUser(userId) });
 }
 
-async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unknown): Promise<Response> {
+async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unknown, anexo?: unknown): Promise<Response> {
   if (typeof prompt !== 'string' || !prompt.trim()) return json({ error: 'bad_request' }, 400);
+  // foto ou documento (Plus): vai junto para a IA e é descartado; nunca fica guardado
+  const ax = anexoBloco(anexo);
+  if (ax.erro) return json({ error: ax.erro }, ax.erro === 'anexo_grande' ? 413 : 400);
   const pl = await planoUser(userId);
   const livre = pl.plano === 'livre';
   // Grátis não tem IA (decisão do Tiago, 11/11): o app responde no modo simples
@@ -198,19 +202,21 @@ async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unk
       max_tokens: 3000,
       // A parte fixa (persona, formato e regras) vai em cache: a partir do 2º pedido em 5 min, sai ~90% mais barata.
       ...(typeof system === 'string' && system.trim() ? { system: [{ type: 'text', text: system.slice(0, 20000), cache_control: { type: 'ephemeral' } }] } : {}),
-      messages: [{ role: 'user', content: prompt.slice(0, 16000) }],
+      messages: [{ role: 'user', content: ax.bloco ? [ax.bloco, { type: 'text', text: prompt.slice(0, 16000) }] : prompt.slice(0, 16000) }],
     }),
   });
   const t0 = Date.now();
   // "rapida" (pedidos simples, escolhido pelo app): Haiku primeiro, ~16x mais barato; se falhar, a completa.
-  const [primeiro, reserva] = modelo === 'rapida' ? [FALLBACK_MODEL, gratis ? FALLBACK_MODEL : MODEL] : [MODEL, FALLBACK_MODEL];
+  // com anexo, sempre a completa (lê melhor fotos e documentos)
+  const [primeiro, reserva] = modelo === 'rapida' && !ax.bloco ? [FALLBACK_MODEL, gratis ? FALLBACK_MODEL : MODEL] : [MODEL, FALLBACK_MODEL];
+  const tag = ax.bloco ? (ax.bloco.type === 'document' ? 'pdf:' : 'foto:') : '';
   let usado = primeiro;
   let res = await call(primeiro);
   // Se o modelo escolhido falhar (fora do ar, sobrecarregado), tenta o outro antes de desistir.
   if (!res.ok && res.status !== 400 && res.status !== 401) { console.error('anthropic main', res.status); usado = reserva; res = await call(reserva); }
   if (!res.ok) {
     const t = await res.text().catch(() => '');
-    await aiLog(userId, { model: usado, status: res.status, ms: Date.now() - t0, err: t.slice(0, 200) });
+    await aiLog(userId, { model: tag + usado, status: res.status, ms: Date.now() - t0, err: t.slice(0, 200) });
     console.error('anthropic', res.status, t.slice(0, 300));
     if (/credit balance|billing|insufficient/i.test(t)) { await creditEmpty(); return json({ error: 'no_credit' }, 402); }
     return json({ error: res.status === 429 ? 'busy' : 'ai_error', status: res.status }, 502);
@@ -221,7 +227,7 @@ async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unk
   const u = out.usage || {};
   // stop = "max_tokens" quer dizer que a resposta foi cortada; o app usa isso para contar o motivo da falha.
   if (out.stop_reason === 'max_tokens') console.error('anthropic cortada', u.output_tokens || 0);
-  await aiLog(userId, { model: out.model || usado, status: 200, stop: out.stop_reason || '', ms: Date.now() - t0, out_tokens: u.output_tokens || 0 });
+  await aiLog(userId, { model: tag + (out.model || usado), status: 200, stop: out.stop_reason || '', ms: Date.now() - t0, out_tokens: u.output_tokens || 0 });
   return json({ text, stop: out.stop_reason || '', model: out.model || '', cache: { read: u.cache_read_input_tokens || 0, write: u.cache_creation_input_tokens || 0, input: u.input_tokens || 0 } });
 }
 
@@ -490,7 +496,7 @@ Deno.serve(async (req) => {
     if (action === 'cancelar') return await cancelar(user.id);
     if (action === 'pix') return await pixCriar(user, body.nome);
     if (action === 'pixstatus') return await pixStatus(user.id, body.id);
-    if (action === 'ai') return await ai(user.id, body.prompt, body.system, body.modelo);
+    if (action === 'ai') return await ai(user.id, body.prompt, body.system, body.modelo, body.anexo);
     if (action === 'subscribe') return await subscribe(user.id, body.subscription, req.headers.get('user-agent') || '');
     if (action === 'test') return await testPush(user.id);
     if (action === 'nearby') return await nearby(body);

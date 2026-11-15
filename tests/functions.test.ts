@@ -296,6 +296,30 @@ test('api: pedido simples vai para a Íris rápida (Haiku) primeiro; se ela falh
   assert.deepEqual(models, ['claude-sonnet-5-5']);
 });
 
+test('api: foto e PDF vão junto para a IA (sempre a completa) e nunca ficam no registro', async () => {
+  const auth = { Authorization: 'Bearer user-token' };
+  db.usage = []; models.length = 0;
+  const foto = Buffer.from('foto-de-um-boleto').toString('base64');
+  const r = await post(api, { action: 'ai', prompt: 'anota essa conta', modelo: 'rapida', anexo: { mt: 'image/jpeg', data: foto } }, auth);
+  assert.equal(r.status, 200);
+  assert.deepEqual(models, ['claude-sonnet-5-5']);
+  const c = anthropicBody.messages[0].content;
+  assert.equal(c[0].type, 'image');
+  assert.deepEqual(c[0].source, { type: 'base64', media_type: 'image/jpeg', data: foto });
+  assert.equal(c[1].type, 'text');
+  assert.equal(c[1].text, 'anota essa conta');
+  assert.equal(db.ai_log.at(-1).model, 'foto:claude-sonnet-5-5');
+  assert.ok(!JSON.stringify(db.ai_log).includes(foto));
+  await post(api, { action: 'ai', prompt: 'lê', anexo: { mt: 'application/pdf', data: 'JVBERi0xLjQ=' } }, auth);
+  assert.equal(anthropicBody.messages[0].content[0].type, 'document');
+  assert.equal(db.ai_log.at(-1).model, 'pdf:claude-sonnet-5-5');
+  assert.equal((await post(api, { action: 'ai', prompt: 'x', anexo: { mt: 'application/zip', data: 'AAAA' } }, auth)).status, 400);
+  assert.equal((await post(api, { action: 'ai', prompt: 'x', anexo: { mt: 'image/png', data: 'A'.repeat(4_600_000) } }, auth)).status, 413);
+  // sem anexo, continua igual (texto simples)
+  await post(api, { action: 'ai', prompt: 'oi' }, auth);
+  assert.equal(anthropicBody.messages[0].content, 'oi');
+});
+
 test('api: padaria mais próxima, ordenada por distância', async () => {
   const auth = { Authorization: 'Bearer user-token' };
   const r = await (await post(api, { action: 'nearby', lat: -23.5505, lon: -46.6333, termo: 'padaria', osm: ['shop=bakery', 'x"];out;'] }, auth)).json();
