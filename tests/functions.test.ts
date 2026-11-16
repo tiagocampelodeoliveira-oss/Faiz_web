@@ -315,9 +315,16 @@ test('api: foto e PDF vão junto para a IA (sempre a completa) e nunca ficam no 
   assert.equal(db.ai_log.at(-1).model, 'pdf:claude-sonnet-5-5');
   assert.equal((await post(api, { action: 'ai', prompt: 'x', anexo: { mt: 'application/zip', data: 'AAAA' } }, auth)).status, 400);
   assert.equal((await post(api, { action: 'ai', prompt: 'x', anexo: { mt: 'image/png', data: 'A'.repeat(4_600_000) } }, auth)).status, 413);
+  assert.equal(anthropicBody.max_tokens, 8000);
+  // texto colado (calendário copiado de um site) vai como documento de texto
+  await post(api, { action: 'ai', prompt: 'organiza', anexo: { mt: 'text/plain', data: 'Calendário 2027\n02/02 Início das aulas' } }, auth);
+  assert.deepEqual(anthropicBody.messages[0].content[0], { type: 'document', source: { type: 'text', media_type: 'text/plain', data: 'Calendário 2027\n02/02 Início das aulas' } });
+  assert.equal(db.ai_log.at(-1).model, 'texto:claude-sonnet-5-5');
+  assert.equal((await post(api, { action: 'ai', prompt: 'x', anexo: { mt: 'text/plain', data: 'a'.repeat(150_001) } }, auth)).status, 413);
   // sem anexo, continua igual (texto simples)
   await post(api, { action: 'ai', prompt: 'oi' }, auth);
   assert.equal(anthropicBody.messages[0].content, 'oi');
+  assert.equal(anthropicBody.max_tokens, 3000);
 });
 
 test('api: padaria mais próxima, ordenada por distância', async () => {

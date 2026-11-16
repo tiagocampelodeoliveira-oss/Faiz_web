@@ -199,7 +199,8 @@ async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unk
     body: JSON.stringify({
       model,
       // 3000: planos grandes (várias rotinas, contas e tarefas numa frase) passavam de 1500 e chegavam cortados.
-      max_tokens: 3000,
+      // Com arquivo, 8000: um calendário escolar do ano inteiro tem dezenas de datas.
+      max_tokens: ax.bloco ? 8000 : 3000,
       // A parte fixa (persona, formato e regras) vai em cache: a partir do 2º pedido em 5 min, sai ~90% mais barata.
       ...(typeof system === 'string' && system.trim() ? { system: [{ type: 'text', text: system.slice(0, 20000), cache_control: { type: 'ephemeral' } }] } : {}),
       messages: [{ role: 'user', content: ax.bloco ? [ax.bloco, { type: 'text', text: prompt.slice(0, 16000) }] : prompt.slice(0, 16000) }],
@@ -209,7 +210,7 @@ async function ai(userId: string, prompt: unknown, system: unknown, modelo?: unk
   // "rapida" (pedidos simples, escolhido pelo app): Haiku primeiro, ~16x mais barato; se falhar, a completa.
   // com anexo, sempre a completa (lê melhor fotos e documentos)
   const [primeiro, reserva] = modelo === 'rapida' && !ax.bloco ? [FALLBACK_MODEL, gratis ? FALLBACK_MODEL : MODEL] : [MODEL, FALLBACK_MODEL];
-  const tag = ax.bloco ? (ax.bloco.type === 'document' ? 'pdf:' : 'foto:') : '';
+  const tag = ax.bloco ? (ax.bloco.type === 'image' ? 'foto:' : (ax.bloco.source as any)?.type === 'text' ? 'texto:' : 'pdf:') : '';
   let usado = primeiro;
   let res = await call(primeiro);
   // Se o modelo escolhido falhar (fora do ar, sobrecarregado), tenta o outro antes de desistir.

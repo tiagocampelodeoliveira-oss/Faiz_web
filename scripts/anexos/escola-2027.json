@@ -1,0 +1,326 @@
+[
+{
+"dia": "2027-02-01",
+"ate": null,
+"titulo": "Início do ano letivo",
+"tipo": "marco"
+},
+{
+"dia": "2027-02-08",
+"ate": "2027-02-10",
+"titulo": "Carnaval - recesso",
+"tipo": "feriado"
+},
+{
+"dia": "2027-02-27",
+"ate": null,
+"titulo": "Sábado letivo",
+"tipo": "letivo"
+},
+{
+"dia": "2027-03-06",
+"ate": null,
+"titulo": "Reunião de pais - 1º bimestre",
+"tipo": "reuniao"
+},
+{
+"dia": "2027-03-13",
+"ate": null,
+"titulo": "Simulado 1",
+"tipo": "simulado"
+},
+{
+"dia": "2027-03-26",
+"ate": null,
+"titulo": "Feriado - Sexta-feira Santa",
+"tipo": "feriado"
+},
+{
+"dia": "2027-04-05",
+"ate": "2027-04-09",
+"titulo": "Avaliações do 1º bimestre",
+"tipo": "prova"
+},
+{
+"dia": "2027-04-12",
+"ate": "2027-04-14",
+"titulo": "Recuperação do 1º bimestre",
+"tipo": "recup"
+},
+{
+"dia": "2027-04-16",
+"ate": null,
+"titulo": "Fim do 1º bimestre",
+"tipo": "marco"
+},
+{
+"dia": "2027-04-19",
+"ate": null,
+"titulo": "Início do 2º bimestre",
+"tipo": "marco"
+},
+{
+"dia": "2027-04-21",
+"ate": null,
+"titulo": "Feriado - Tiradentes",
+"tipo": "feriado"
+},
+{
+"dia": "2027-04-23",
+"ate": null,
+"titulo": "Conselho de classe - sem aula",
+"tipo": "conselho"
+},
+{
+"dia": "2027-05-01",
+"ate": null,
+"titulo": "Feriado - Dia do Trabalho",
+"tipo": "feriado"
+},
+{
+"dia": "2027-05-08",
+"ate": null,
+"titulo": "Simulado 2",
+"tipo": "simulado"
+},
+{
+"dia": "2027-05-15",
+"ate": null,
+"titulo": "Reunião de pais - 1º bimestre (entrega de boletins)",
+"tipo": "reuniao"
+},
+{
+"dia": "2027-05-27",
+"ate": null,
+"titulo": "Feriado - Corpus Christi",
+"tipo": "feriado"
+},
+{
+"dia": "2027-05-28",
+"ate": null,
+"titulo": "Recesso escolar",
+"tipo": "feriado"
+},
+{
+"dia": "2027-06-05",
+"ate": null,
+"titulo": "Sábado letivo",
+"tipo": "letivo"
+},
+{
+"dia": "2027-06-12",
+"ate": null,
+"titulo": "Simulado 3",
+"tipo": "simulado"
+},
+{
+"dia": "2027-06-19",
+"ate": null,
+"titulo": "Festa Junina",
+"tipo": "evento"
+},
+{
+"dia": "2027-06-21",
+"ate": "2027-06-25",
+"titulo": "Avaliações do 2º bimestre",
+"tipo": "prova"
+},
+{
+"dia": "2027-06-28",
+"ate": "2027-06-30",
+"titulo": "Recuperação do 2º bimestre",
+"tipo": "recup"
+},
+{
+"dia": "2027-07-02",
+"ate": null,
+"titulo": "Fim do 1º semestre",
+"tipo": "marco"
+},
+{
+"dia": "2027-07-05",
+"ate": null,
+"titulo": "Conselho de classe - sem aula",
+"tipo": "conselho"
+},
+{
+"dia": "2027-07-05",
+"ate": "2027-07-23",
+"titulo": "Férias escolares",
+"tipo": "ferias"
+},
+{
+"dia": "2027-07-26",
+"ate": null,
+"titulo": "Início do 2º semestre",
+"tipo": "marco"
+},
+{
+"dia": "2027-08-07",
+"ate": null,
+"titulo": "Reunião de pais - 2º bimestre",
+"tipo": "reuniao"
+},
+{
+"dia": "2027-08-14",
+"ate": null,
+"titulo": "Simulado 4",
+"tipo": "simulado"
+},
+{
+"dia": "2027-08-21",
+"ate": null,
+"titulo": "Sábado letivo",
+"tipo": "letivo"
+},
+{
+"dia": "2027-08-27",
+"ate": null,
+"titulo": "Feira de Ciências",
+"tipo": "evento"
+},
+{
+"dia": "2027-09-06",
+"ate": null,
+"titulo": "Recesso",
+"tipo": "feriado"
+},
+{
+"dia": "2027-09-07",
+"ate": null,
+"titulo": "Feriado - Independência",
+"tipo": "feriado"
+},
+{
+"dia": "2027-09-13",
+"ate": "2027-09-17",
+"titulo": "Avaliações do 3º bimestre",
+"tipo": "prova"
+},
+{
+"dia": "2027-09-20",
+"ate": "2027-09-22",
+"titulo": "Recuperação do 3º bimestre",
+"tipo": "recup"
+},
+{
+"dia": "2027-09-24",
+"ate": null,
+"titulo": "Fim do 3º bimestre",
+"tipo": "marco"
+},
+{
+"dia": "2027-09-27",
+"ate": null,
+"titulo": "Início do 4º bimestre",
+"tipo": "marco"
+},
+{
+"dia": "2027-10-01",
+"ate": null,
+"titulo": "Conselho de classe - sem aula",
+"tipo": "conselho"
+},
+{
+"dia": "2027-10-09",
+"ate": null,
+"titulo": "Simulado 5",
+"tipo": "simulado"
+},
+{
+"dia": "2027-10-11",
+"ate": null,
+"titulo": "Recesso - Dia das Crianças",
+"tipo": "feriado"
+},
+{
+"dia": "2027-10-12",
+"ate": null,
+"titulo": "Feriado - N. Sra. Aparecida",
+"tipo": "feriado"
+},
+{
+"dia": "2027-10-15",
+"ate": null,
+"titulo": "Dia do Professor - sem aula",
+"tipo": "feriado"
+},
+{
+"dia": "2027-10-16",
+"ate": null,
+"titulo": "Reunião de pais - 3º bimestre",
+"tipo": "reuniao"
+},
+{
+"dia": "2027-10-23",
+"ate": null,
+"titulo": "Jogos escolares",
+"tipo": "evento"
+},
+{
+"dia": "2027-11-01",
+"ate": null,
+"titulo": "Recesso",
+"tipo": "feriado"
+},
+{
+"dia": "2027-11-02",
+"ate": null,
+"titulo": "Feriado - Finados",
+"tipo": "feriado"
+},
+{
+"dia": "2027-11-06",
+"ate": null,
+"titulo": "Simulado 6",
+"tipo": "simulado"
+},
+{
+"dia": "2027-11-15",
+"ate": null,
+"titulo": "Feriado - Proclamação da República",
+"tipo": "feriado"
+},
+{
+"dia": "2027-11-20",
+"ate": null,
+"titulo": "Feriado - Consciência Negra",
+"tipo": "feriado"
+},
+{
+"dia": "2027-11-22",
+"ate": "2027-11-26",
+"titulo": "Avaliações do 4º bimestre",
+"tipo": "prova"
+},
+{
+"dia": "2027-11-29",
+"ate": "2027-12-03",
+"titulo": "Recuperação final",
+"tipo": "recup"
+},
+{
+"dia": "2027-12-06",
+"ate": null,
+"titulo": "Conselho de classe final - sem aula",
+"tipo": "conselho"
+},
+{
+"dia": "2027-12-10",
+"ate": null,
+"titulo": "Formatura do 9º ano",
+"tipo": "evento"
+},
+{
+"dia": "2027-12-11",
+"ate": null,
+"titulo": "Reunião de pais - entrega de boletins finais",
+"tipo": "reuniao"
+},
+{
+"dia": "2027-12-15",
+"ate": null,
+"titulo": "Último dia letivo",
+"tipo": "marco"
+}
+]
