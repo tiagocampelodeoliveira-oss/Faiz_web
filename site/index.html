@@ -560,7 +560,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-16 19:42';
+const APP_VERSION = '2026-11-16 19:48';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -1998,6 +1998,15 @@ function onbFim() {
   S.onb = null; S.stats.onb = { ...(S.stats.onb || {}), fim: new Date().toISOString() };
   save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0);
 }
+/** Link de revisão do Google (?review=google): pula o salvar com Google e a entrevista no primeiro uso,
+    para o revisor da verificação ir direto às integrações. Fica guardado neste navegador. */
+function revisaoGoogle() {
+  try {
+    if (new URLSearchParams(location.search).get('review') === 'google') localStorage.setItem('faiz:review', '1');
+    return localStorage.getItem('faiz:review') === '1';
+  } catch (e) { return false; }
+}
+revisaoGoogle();
 /** Na entrevista obrigatória, ninguém fica preso: depois de 3 respostas no mesmo assunto (ou 2 com a IA falhando), segue. */
 function onbDestrava(etapaAntes, failed) {
   const e = S.entrevista;
@@ -3631,6 +3640,7 @@ document.addEventListener('click', (e) => {
       S.name = n; S.onboarded = true; S.startDate = today();
       // primeiro uso guiado (11/11, ideia do Tiago): nome → conta Google (obrigatória) → rotina com a Íris (sem pular) → avisos → tutorial
       S.onb = S.account?.google ? 'rotina' : 'conta'; S.stats.onb = { nome: new Date().toISOString() };
+      if (revisaoGoogle()) { S.onb = null; S.stats.onb.revisao = true; } // revisor do Google: sem conta e sem entrevista obrigatórias
       if (S.onb === 'rotina') onbRotina();
       save(); U.tab = 'hoje'; render(); window.scrollTo(0, 0);
       // gente nova: grava a conta no servidor e já busca o plano (a tela de planos é a primeira coisa que aparece)
