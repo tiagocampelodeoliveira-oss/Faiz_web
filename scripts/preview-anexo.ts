@@ -18,14 +18,16 @@ const logicSrc = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => 
 const box: any = {}; vm.runInNewContext(logicSrc + ';this.L = FazLogic;', box);
 const L = box.L;
 
+const gabarito: { dia: string; ate: string | null; titulo: string; tipo: string }[] = JSON.parse(readFileSync('scripts/anexos/escola-2027.json', 'utf8'));
 const casos = [
-  { arq: 'scripts/anexos/calendario-2027.pdf', mt: 'application/pdf', tipo: 'pdf', nome: 'calendario-2027.pdf', frase: '' },
-  { arq: 'scripts/anexos/calendario-2027.pdf', mt: 'application/pdf', tipo: 'pdf', nome: 'calendario-2027.pdf', frase: 'esse é o calendário da minha faculdade, coloca as provas e entregas na agenda' },
+  { arq: 'scripts/anexos/escola-2027-grade.jpg', mt: 'image/jpeg', tipo: 'foto', nome: 'calendario.jpg', frase: '', feriados: false },
+  { arq: 'scripts/anexos/escola-2027.txt', mt: 'text/plain', tipo: 'texto', nome: 'Texto colado (80 linhas)', frase: '', feriados: false },
+  { arq: 'scripts/anexos/escola-2027.pdf', mt: 'application/pdf', tipo: 'pdf', nome: 'calendario-escolar-2027.pdf', frase: 'coloca tudo na agenda, inclusive feriados e recessos', feriados: true },
 ];
 const linhas: string[] = [];
 for (const c of casos) {
-  const data = readFileSync(c.arq).toString('base64');
-  const pedido = c.frase || (c.tipo === 'pdf' ? 'Lê esse documento e coloca no lugar certo pra mim' : 'Vê essa foto e coloca no lugar certo pra mim');
+  const data = c.mt === 'text/plain' ? readFileSync(c.arq, 'utf8') : readFileSync(c.arq).toString('base64');
+  const pedido = c.frase || (c.tipo === 'pdf' ? 'Lê esse documento e coloca no lugar certo pra mim' : c.tipo === 'texto' ? 'Lê esse texto e coloca no lugar certo pra mim' : 'Vê essa foto e coloca no lugar certo pra mim');
   const ctx = { now: new Date(), tasks: [], fin: L.emptyFin(), routines: [] };
   const p = L.buildPromptParts(pedido, ctx, [], { nome: 'Tiago' }, { anexo: { tipo: c.tipo, nome: c.nome } });
   const t0 = Date.now();
@@ -40,8 +42,16 @@ for (const c of casos) {
     const fin = (rep.fin || []).map((o: any) => o.fixa ? `conta ${o.fixa.nome} ${o.fixa.valor / 100} dia ${o.fixa.dia} ${o.fixa.desde}→${o.fixa.ate || '∞'}` : o.mov ? `${o.mov.tipo} ${o.mov.desc} ${o.mov.valor / 100} ${o.mov.data}` : o.type).join('; ');
     const ops = (rep.ops || []).filter((o: any) => o.type === 'add').map((o: any) => `${o.task.date} ${o.task.title}`).join('; ');
     const rot = (rep.routines || []).map((x: any) => `${x.title} ${L.diasLabel(x.dias)} ${L.timeRange(x.start, x.end)}`).join('; ');
+    const adds = (rep.ops || []).filter((o: any) => o.type === 'add').map((o: any) => o.task);
+    const esperado = gabarito.filter((g) => c.feriados || g.tipo !== 'feriado');
+    const achou = esperado.filter((g) => adds.some((t: any) => t.date === g.dia));
+    const falta = esperado.filter((g) => !achou.includes(g)).map((g) => `${g.dia.slice(5)} ${g.titulo}`);
+    const datasCertas = new Set(gabarito.map((g) => g.dia));
+    const erradas = adds.filter((t: any) => !datasCertas.has(t.date)).map((t: any) => `${t.date.slice(5)} ${t.title}`);
+    const comHora = adds.filter((t: any) => t.start != null).length;
+    const placar = `ACERTO ${achou.length}/${esperado.length} | itens ${adds.length} | datas fora do gabarito ${erradas.length}${erradas.length ? ` (${erradas.slice(0, 8).join('; ')})` : ''} | faltaram: ${falta.slice(0, 12).join('; ') || '-'} | com hora ${comHora} | rotinas: ${(rep.routines || []).map((x: any) => `${x.title} ${L.diasLabel(x.dias)} ${L.timeRange(x.start, x.end)}${x.until ? ' até ' + x.until : ''}`).join('; ') || '-'}`;
     const tipos = (cmd.acao === 'varios' ? (cmd.comandos || []) : [cmd]).map((x: any) => x.acao).join('+');
-    texto = `[${tipos}] ${rep.text} ${fin ? `{contas: ${fin}}` : ''} ${rot ? `{rotinas: ${rot}}` : ''} ${ops ? `{agenda (${(rep.ops || []).length}): ${ops}}` : ''} [stop ${body.stop}, saída ${String(body.text || '').length} car.] ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} (${((Date.now() - t0) / 1000).toFixed(1)} s, ${body.model}, entrada ${body.cache?.input || 0} tokens)`;
+    texto = `${placar} || [${tipos}] ${rep.text.split('\\n')[0]}  [stop ${body.stop}, saída ${String(body.text || '').length} car.] ${rep.sugs ? `[botões: ${rep.sugs.join(' | ')}]` : ''} (${((Date.now() - t0) / 1000).toFixed(1)} s, ${body.model}, entrada ${body.cache?.input || 0} tokens)`;
   } catch (e) { texto = `(falhou) ${String(e).slice(0, 300)} ${String(body.text || '').slice(0, 200)}`; }
   linhas.push(`${c.nome} + "${c.frase}" → ${texto.replace(/\n/g, ' / ')}`);
 }
