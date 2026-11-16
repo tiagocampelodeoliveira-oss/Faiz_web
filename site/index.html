@@ -560,7 +560,7 @@ const L = FazLogic;
 const CFG = window.FAIZ_CONFIG || {};
 const APP_URL = CFG.siteUrl || location.href.split(/[?#]/)[0];
 const KEY = 'faiz:v2';
-const APP_VERSION = '2026-11-15 21:26';
+const APP_VERSION = '2026-11-16 19:42';
 const AUTH_KEY = 'faiz:auth';
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -968,7 +968,7 @@ function ligarGoogle(k) {
     el.querySelector('#glNo').onclick = closeSheet;
     el.querySelector('#glYes').onclick = async () => {
       closeSheet();
-      const sc = [...new Set(Object.keys(GSCOPES).filter((x) => x === k || integ(x)).map((x) => GSCOPES[x]))].join(' ');
+      const sc = [...new Set(Object.keys(GSCOPES).filter((x) => (x === k || integ(x)) && (x !== 'gmail' || gmailOferta())).map((x) => GSCOPES[x]))].join(' ');
       if (S.updatedAt) { clearTimeout(saveT); persistLocal(); await Cloud.push(); }
       if (U.gRedirect && U.gId) { S.stats.gCaminho = 'proprio'; save(); location.href = googleIntegUrl(k, sc); return; }
       try { await Cloud.google('scopes:' + k, sc); }
@@ -977,9 +977,9 @@ function ligarGoogle(k) {
   });
 }
 function desligarGoogle() {
-  confirmSheet('Desligar as integrações do Google?', 'Eu paro de ler sua agenda, tarefas, contatos e e-mails. O que você criou no Faiz continua.', 'Desligar', async () => {
+  confirmSheet('Desligar as integrações do Google?', 'Eu paro de ler sua agenda, tarefas e contatos, cancelo a permissão no Google e apago daqui o que veio de lá. O que você criou no Faiz continua.', 'Desligar', async () => {
     try { await Cloud.fn('gforget'); } catch (e) {}
-    S.integ = {}; S.tasks = S.tasks.filter((t) => !((t.source === 'google' && t.date >= today()) || t.source === 'gtasks')); G.reset(); save(); render(true); toast('Integrações desligadas');
+    S.integ = {}; S.tasks = S.tasks.filter((t) => t.source !== 'google' && t.source !== 'gtasks'); G.reset(); save(); render(true); toast('Integrações desligadas');
   });
 }
 
@@ -1164,7 +1164,7 @@ function lerBoleto(txt, de, hoje) {
 }
 window.__lerBoleto = lerBoleto;
 async function gmailScan(force) {
-  if (!integ('gmail') || U.gmailBusy || ehGratis()) return;
+  if (!integ('gmail') || !gmailOferta() || U.gmailBusy || ehGratis()) return;
   if (!force && U.gmailAt && Date.now() - U.gmailAt < 60 * 60000) return;
   U.gmailBusy = true; render(true);
   try {
@@ -1228,9 +1228,10 @@ function novidadeSheet() {
 }
 /* Gmail fora das ligações novas (11/11): o escopo é restrito e a verificação do Google pediria auditoria paga.
    Quem já ligou continua usando. U.gmailNovo = true liga de novo (testes). */
-function gmailOferta() { return !!U.gmailNovo || integ('gmail'); }
+// Gmail desligado para todos desde 16/11 (verificação do Google: o app só pede Agenda, Tarefas e Contatos). U.gmailNovo (ou faiz:gmailTeste no navegador) religa só no teste.
+function gmailOferta() { if (U.gmailNovo) return true; try { return localStorage.getItem('faiz:gmailTeste') === '1'; } catch (e) { return false; } }
 function gmailCard() {
-  if (!U.googleOk) return '';
+  if (!U.googleOk || !gmailOferta()) return '';
   if (!integ('gmail')) return !gmailOferta() ? '' : `<button class="card irisline" type="button" data-act="g-ligar" data-v="gmail" style="margin-top:14px">${irisImg('oculos', 40)}<span><b>Procurar contas no meu Gmail</b><br><span class="meta">Eu acho faturas e boletos e você só confirma.</span></span></button>`;
   const f = U.gmailFound || [];
   return `<div class="label" style="display:flex;justify-content:space-between;align-items:center"><span>Achei no seu e-mail</span><button class="textbtn" type="button" data-act="g-scan" style="padding:0">${U.gmailBusy ? 'Procurando...' : 'Procurar de novo'}</button></div>
@@ -1803,7 +1804,7 @@ async function send(text, opt = {}) {
   }
   U.typing = true; U.lendo = !!anexo; U.scrollChat = true; render(true);
   const etapaAntes = S.entrevista?.etapa;
-  const ctx = { now: new Date(), tasks: S.tasks, fin: S.fin, integ: S.integ || {}, routines: S.routines, entrevista: entrevistaCtx(), recentUser: S.chat.filter((m) => m.who === 'me').slice(-4).map((m) => m.text).join(' ') };
+  const ctx = { now: new Date(), tasks: S.tasks, fin: S.fin, integ: gmailOferta() ? (S.integ || {}) : { ...(S.integ || {}), gmail: false }, routines: S.routines, entrevista: entrevistaCtx(), recentUser: S.chat.filter((m) => m.who === 'me').slice(-4).map((m) => m.text).join(' ') };
   let reply, failed = false;
   if (Cloud.on && U.aiState !== 'off' && U.aiOn && !U.trialOver && !ehGratis()) {
     try {

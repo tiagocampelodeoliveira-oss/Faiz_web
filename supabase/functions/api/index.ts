@@ -520,7 +520,16 @@ Deno.serve(async (req) => {
     if (action === 'gcode') { if ((await planoUser(user.id)).plano === 'gratis') return json({ error: 'plus_only' }, 403); return await googleCode(user.id, body.code); }
     if (action === 'gsave') return await googleSave(user.id, body.refresh_token, body.scopes);
     if (action === 'gtoken') { if ((await planoUser(user.id)).plano === 'gratis') return json({ error: 'plus_only' }, 403); return await googleToken(user.id); }
-    if (action === 'gforget') { await rest(`google_tokens?user_id=eq.${user.id}`, { method: 'DELETE' }); return json({ ok: true }); }
+    if (action === 'gforget') {
+      // Desligar: revoga a autorização no Google (o acesso acaba de verdade) e apaga a chave guardada
+      const row = (await rest(`google_tokens?user_id=eq.${user.id}&select=refresh_token`))?.[0];
+      if (row?.refresh_token) {
+        try { await fetch('https://oauth2.googleapis.com/revoke', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: row.refresh_token }), signal: AbortSignal.timeout(8000) }); }
+        catch (e) { console.error('revoke', e); }
+      }
+      await rest(`google_tokens?user_id=eq.${user.id}`, { method: 'DELETE' });
+      return json({ ok: true });
+    }
     if (action === 'tts' && (await planoUser(user.id)).plano === 'gratis') return json({ error: 'plus_only' }, 403);
     if (action === 'tts') {
       // Voz da Íris no chat de voz: devolve o MP3 (o app cai na voz do celular se der erro)

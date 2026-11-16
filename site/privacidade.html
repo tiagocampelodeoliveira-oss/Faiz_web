@@ -15,37 +15,61 @@ p,li{color:var(--ink)}
 .meta{color:var(--muted);font-size:14px;margin:0 0 20px}
 ul{padding-left:20px}
 a{color:#4453C8}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0}
+.lang{font-size:14px;color:var(--muted)}
 </style>
 </head>
 <body>
 <main>
+<p class="lang">Português · <a href="#english">English version below</a></p>
 <h1>Política de privacidade do Faiz</h1>
-<p class="meta">Última atualização: 11 de novembro de 2026.</p>
+<p class="meta">Última atualização: 16 de novembro de 2026.</p>
 
-<p>O Faiz é um assistente pessoal: você diz o que precisa e a Íris, a assistente do Faiz, organiza sua agenda, suas rotinas e as contas da casa, e te lembra de tudo no celular. Esta página explica quais dados usamos, para quê, onde ficam e como apagar.</p>
+<p>O Faiz é um assistente pessoal: você diz o que precisa e a Íris, a assistente do Faiz, organiza sua agenda, suas rotinas e as contas da casa, e te lembra de tudo no celular. Esta página explica quais dados usamos, para quê, onde ficam, como protegemos e como apagar.</p>
 
 <h2>Quais dados o Faiz guarda</h2>
 <ul>
   <li><b>O que você coloca no app:</b> seu primeiro nome, tarefas, rotinas, lembretes, contas e gastos que você anota, e as últimas mensagens da conversa com a Íris.</li>
   <li><b>Conta Google (opcional):</b> se você tocar em "Entrar com Google", recebemos só seu <b>nome e e-mail</b>, para você não perder os dados ao trocar de celular.</li>
-  <li><b>Integrações com o Google (opcionais, você liga uma por uma em Mais):</b>
+  <li><b>Integrações com o Google (opcionais, você liga uma por uma em Mais › Conta e Google):</b>
     <ul>
-      <li><b>Google Agenda (somente leitura):</b> o app lê a lista das suas agendas visíveis e os compromissos dos próximos 30 dias, para montar planos sem conflito. O Faiz não cria, muda nem apaga nada na sua agenda.</li>
-      <li><b>Google Tarefas (somente leitura):</b> o app lê suas tarefas com data (de 7 dias atrás até 60 dias à frente) para te lembrar delas no dia, e marca como feita a que você concluir lá. O Faiz não cria, muda nem apaga nada no Google Tarefas.</li>
-      <li><b>Contatos:</b> o app procura o nome que você citou ("jantar com a Ana") para oferecer o botão de avisar a pessoa no WhatsApp. A lista de contatos não é guardada.</li>
-      <li><b>Gmail (somente leitura):</b> o app procura e-mails de boletos e faturas dos últimos 40 dias e mostra valor e vencimento para você anotar em Contas. O Faiz nunca envia, apaga ou altera e-mails, e o texto dos e-mails não é guardado: só fica salvo o que você decidir anotar.</li>
+      <li><b>Google Agenda (somente leitura)</b> — permissões <code>calendar.events.readonly</code> e <code>calendar.calendarlist.readonly</code>: o app lê a lista das suas agendas visíveis e os compromissos dos próximos 30 dias (título, data e horário), para montar planos sem conflito e te avisar antes de cada compromisso. O Faiz não cria, muda nem apaga nada na sua agenda.</li>
+      <li><b>Google Tarefas (somente leitura)</b> — permissão <code>tasks.readonly</code>: o app lê suas tarefas com data (de 7 dias atrás até 60 dias à frente; título, data e se está concluída) para te lembrar delas no dia. O Faiz não cria, muda nem apaga nada no Google Tarefas.</li>
+      <li><b>Contatos (somente leitura)</b> — permissão <code>contacts.readonly</code>: quando você marca algo com alguém ("jantar com a Ana"), o app procura esse nome nos seus contatos para oferecer o botão de avisar a pessoa no WhatsApp. A lista de contatos fica só na memória do celular por alguns minutos e não é guardada; fica salvo apenas o botão com o nome e o telefone da pessoa que você citou.</li>
     </ul>
-    Essas leituras são feitas pelo seu próprio celular, direto no Google. Nosso servidor guarda apenas a autorização do Google (para o acesso continuar valendo), nunca o conteúdo da agenda, dos contatos ou dos e-mails. Você pode desligar a qualquer momento no app (Mais › Conta e Google) ou em myaccount.google.com/permissions. O uso de dados recebidos das APIs do Google segue a Política de Dados do Usuário dos Serviços de API do Google, incluindo os requisitos de Uso Limitado.</li>
+    O Faiz não pede acesso ao Gmail.</li>
   <li><b>Avisos no celular:</b> um endereço técnico que o seu celular gera para receber os avisos.</li>
   <li><b>Localização:</b> só quando você pede um lugar perto ("padaria mais próxima"), e apenas naquele momento. Não guardamos sua localização.</li>
-  <li><b>Uso do app:</b> contadores (quantos pedidos, tarefas concluídas, dias de uso), o tipo de aparelho e as respostas da pesquisa do teste. Isso serve para melhorar o Faiz e nunca inclui o texto das suas conversas.</li>
+  <li><b>Uso do app:</b> contadores (quantos pedidos, tarefas concluídas, dias de uso), o tipo de aparelho e as respostas da pesquisa. Isso serve para melhorar o Faiz e nunca inclui o texto das suas conversas.</li>
+  <li><b>Pagamento do Plus:</b> feito pelo Mercado Pago. O Faiz guarda só a situação da assinatura (ativa, cancelada, até quando vale), nunca os dados do cartão.</li>
+</ul>
+
+<h2>Como usamos os dados do Google</h2>
+<ul>
+  <li>As leituras são feitas pelo seu próprio celular, direto no Google, com uma chave de acesso que vale 1 hora e fica só na memória do aparelho.</li>
+  <li>Os compromissos e as tarefas do Google que aparecem no Faiz (título, data, horário e se estão concluídas) ficam guardados junto com os seus dados no nosso servidor, para a Íris montar seus planos e para o servidor mandar o aviso antes de cada compromisso. Eles são atualizados a cada leitura e apagados quando você desliga as integrações.</li>
+  <li>Para responder seus pedidos, a Íris envia à inteligência artificial (Anthropic) a sua agenda dos próximos dias, que pode incluir os títulos e horários vindos do Google. Isso é usado só para responder aquele pedido.</li>
+  <li>Usamos os dados do Google <b>somente</b> para essas funções que você vê no app. Não vendemos, não usamos para publicidade, não transferimos para terceiros fora das funções acima e <b>não usamos para treinar modelos de inteligência artificial</b> (nossos nem de outros). A Anthropic, pelos termos comerciais da sua API, também não usa esses dados para treinar modelos.</li>
+  <li>Nenhuma pessoa da equipe lê seus dados do Google, a não ser com a sua autorização (por exemplo, quando você relata um problema), quando for necessário por segurança ou quando a lei exigir.</li>
+  <li>O uso e a transferência de dados recebidos das APIs do Google seguem a <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de Uso Limitado.</li>
+</ul>
+
+<h2>Como protegemos seus dados</h2>
+<ul>
+  <li><b>Criptografia no caminho:</b> toda comunicação entre o app, o nosso servidor e o Google usa HTTPS (TLS). Os avisos no celular também são criptografados de ponta a ponta (padrão Web Push).</li>
+  <li><b>Criptografia guardada:</b> o banco de dados fica no Supabase, em São Paulo, com os dados criptografados em disco (AES-256) e cópias de segurança também criptografadas.</li>
+  <li><b>Cada pessoa só vê o que é seu:</b> o banco tem regras de acesso por linha (Row Level Security). Com a sua sessão, o app só consegue ler e gravar os seus próprios dados.</li>
+  <li><b>Autorização do Google protegida:</b> a chave de renovação do Google fica numa tabela que só o servidor lê, nunca o celular nem outras pessoas. Ela é usada apenas para gerar a chave de 1 hora. O segredo do app no Google e as demais chaves de serviços ficam guardados como segredos do servidor, nunca no código do app.</li>
+  <li><b>Acesso mínimo:</b> pedimos só permissões de leitura, e cada uma só quando você liga a integração.</li>
+  <li><b>Acesso restrito da equipe:</b> só os responsáveis pelo Faiz acessam a administração do servidor, com contas protegidas.</li>
+  <li><b>Desligar de verdade:</b> quando você desliga as integrações (Mais › Conta e Google), o Faiz cancela a autorização no Google, apaga a chave guardada e apaga do app os compromissos e tarefas que vieram do Google. Você também pode cancelar em <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
 </ul>
 
 <h2>Para que usamos</h2>
 <ul>
   <li>Montar seus planos, lembrar você na hora certa e somar suas contas.</li>
   <li>Responder seus pedidos com inteligência artificial.</li>
-  <li>Entender como o app está sendo usado no teste, para melhorá-lo.</li>
+  <li>Entender como o app está sendo usado, para melhorá-lo.</li>
 </ul>
 <p>Não vendemos seus dados e não usamos seus dados para publicidade.</p>
 
@@ -55,17 +79,80 @@ a{color:#4453C8}
   <li><b>Anthropic</b> (inteligência artificial Claude): recebe o seu pedido, o primeiro nome, a agenda dos próximos dias, um resumo das contas e as últimas mensagens, só para responder.</li>
   <li><b>Microsoft Azure</b> (voz da Íris): recebe o texto da resposta para transformar em voz.</li>
   <li><b>OpenStreetMap / Photon</b> (mapas): recebe a localização aproximada, só quando você pede um lugar perto.</li>
+  <li><b>Mercado Pago</b>: processa o pagamento do Plus e recebe o seu e-mail.</li>
   <li><b>Apple e Google</b>: entregam os avisos no seu celular. O Google também fornece as integrações que você ligar.</li>
 </ul>
-
-<h2>Segurança</h2>
-<p>Cada pessoa só acessa os próprios dados. As chaves dos serviços ficam no servidor, nunca no celular, e os avisos são criptografados.</p>
 
 <h2>Como apagar seus dados</h2>
 <p>No app, abra <b>Mais › Seus dados e privacidade › Apagar todos os meus dados</b>. Para apagar também a cópia guardada no servidor, ou para qualquer dúvida, escreva para <a href="mailto:faizparamim@gmail.com">faizparamim@gmail.com</a> e apagamos em até 7 dias.</p>
 
 <h2>Contato</h2>
 <p>Faiz — <a href="mailto:faizparamim@gmail.com">faizparamim@gmail.com</a></p>
+
+<hr>
+
+<div id="english" lang="en">
+<h1>Faiz — Privacy Policy</h1>
+<p class="meta">Last updated: November 16, 2026.</p>
+
+<p>Faiz is a personal assistant app: you tell Íris, the Faiz assistant, what you need, and she organizes your schedule, routines and household bills and reminds you on your phone. This page explains what data we use, why, where it is kept, how we protect it and how to delete it.</p>
+
+<h2>Data Faiz stores</h2>
+<ul>
+  <li><b>What you enter in the app:</b> your first name, tasks, routines, reminders, bills and expenses you write down, and the latest messages of your chat with Íris.</li>
+  <li><b>Google account (optional):</b> if you tap "Sign in with Google", we receive only your <b>name and email address</b>, so you don't lose your data when you change phones.</li>
+  <li><b>Google integrations (optional, turned on one by one in More › Account and Google):</b>
+    <ul>
+      <li><b>Google Calendar (read-only)</b> — scopes <code>calendar.events.readonly</code> and <code>calendar.calendarlist.readonly</code>: the app reads the list of your visible calendars and your events for the next 30 days (title, date and time), to build plans without conflicts and to remind you before each event. Faiz never creates, changes or deletes anything in your calendar.</li>
+      <li><b>Google Tasks (read-only)</b> — scope <code>tasks.readonly</code>: the app reads your tasks that have a due date (from 7 days ago to 60 days ahead; title, date and completion status) to remind you on the day. Faiz never creates, changes or deletes anything in Google Tasks.</li>
+      <li><b>Contacts (read-only)</b> — scope <code>contacts.readonly</code>: when you schedule something with someone ("dinner with Ana"), the app looks up that name in your contacts to offer a button that opens WhatsApp with a ready-made message to that person. The contact list stays only in the phone's memory for a few minutes and is not stored; only the button with the name and phone number of the person you mentioned is saved.</li>
+    </ul>
+    Faiz does not request access to Gmail.</li>
+  <li><b>Phone notifications:</b> a technical address your phone creates to receive notifications.</li>
+  <li><b>Location:</b> only when you ask for a nearby place, and only at that moment. We do not store your location.</li>
+  <li><b>App usage:</b> counters (number of requests, completed tasks, days of use), device type and survey answers, to improve Faiz. Never the text of your conversations.</li>
+  <li><b>Plus payments:</b> processed by Mercado Pago. Faiz stores only the subscription status, never card details.</li>
+</ul>
+
+<h2>How we use Google user data</h2>
+<ul>
+  <li>Reading is done by your own phone, directly from Google, with a 1-hour access token kept only in the device's memory.</li>
+  <li>The Google events and tasks shown in Faiz (title, date, time and completion status) are stored with your data on our server, so Íris can plan around them and the server can send a reminder before each event. They are refreshed on each sync and deleted when you turn the integrations off.</li>
+  <li>To answer your requests, Íris sends your agenda for the coming days to our AI provider (Anthropic), which may include titles and times from Google. This is used only to answer that request.</li>
+  <li>We use Google user data <b>only</b> to provide these user-facing features. We do not sell it, do not use it for advertising, do not transfer it to third parties except as needed for these features, and <b>do not use it to develop, improve or train generalized AI/ML models</b> (ours or anyone else's). Under its commercial API terms, Anthropic does not train models on this data either.</li>
+  <li>No person on our team reads your Google data unless you give permission (for example, when you report a problem), when needed for security purposes, or when required by law.</li>
+  <li>Faiz's use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</li>
+</ul>
+
+<h2>How we protect your data</h2>
+<ul>
+  <li><b>Encryption in transit:</b> all communication between the app, our server and Google uses HTTPS (TLS). Push notifications are end-to-end encrypted (Web Push standard).</li>
+  <li><b>Encryption at rest:</b> the database is hosted by Supabase in São Paulo, Brazil, encrypted at rest (AES-256), with encrypted backups.</li>
+  <li><b>Per-user isolation:</b> the database enforces Row Level Security. With your session, the app can only read and write your own data.</li>
+  <li><b>Protected Google authorization:</b> the Google refresh token is kept in a table that only the server can read — never the phone or other users — and is used only to issue the 1-hour access token. The OAuth client secret and other service keys are stored as server-side secrets, never in the app's code.</li>
+  <li><b>Minimum scopes:</b> we request read-only scopes only, each one only when you turn that integration on.</li>
+  <li><b>Restricted staff access:</b> only the people responsible for Faiz can access server administration, using protected accounts.</li>
+  <li><b>Real disconnection:</b> when you turn the integrations off (More › Account and Google), Faiz revokes the authorization at Google, deletes the stored token and removes the events and tasks that came from Google. You can also revoke access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+</ul>
+
+<h2>Service providers</h2>
+<ul>
+  <li><b>Supabase</b> (server and database, São Paulo): stores your data.</li>
+  <li><b>Anthropic</b> (Claude AI): receives your request, first name, upcoming agenda, a summary of bills and recent messages, only to answer.</li>
+  <li><b>Microsoft Azure</b> (Íris's voice): receives the answer text to turn it into speech.</li>
+  <li><b>OpenStreetMap / Photon</b> (maps): receives approximate location, only when you ask for a nearby place.</li>
+  <li><b>Mercado Pago</b>: processes Plus payments and receives your email.</li>
+  <li><b>Apple and Google</b>: deliver notifications to your phone. Google also provides the integrations you turn on.</li>
+</ul>
+<p>We do not sell your data and do not use it for advertising.</p>
+
+<h2>Deleting your data</h2>
+<p>In the app, open <b>More › Your data and privacy › Delete all my data</b>. To also delete the copy stored on the server, or for any question, email <a href="mailto:faizparamim@gmail.com">faizparamim@gmail.com</a> and we will delete it within 7 days.</p>
+
+<h2>Contact</h2>
+<p>Faiz — <a href="mailto:faizparamim@gmail.com">faizparamim@gmail.com</a></p>
+</div>
+
 <p><a href="./">Voltar para o Faiz</a></p>
 </main>
 </body>
